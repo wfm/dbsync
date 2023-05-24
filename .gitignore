@@ -2,6 +2,8 @@
 # additions by wfm:
 .DS_Store
 data/
+src/
+output.txt
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

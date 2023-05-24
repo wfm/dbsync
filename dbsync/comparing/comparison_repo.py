@@ -54,11 +54,6 @@ class ComparisonRepo:
         else:
             col.auto_inc = False
 
-    # def _sort_by_pk(self, insert: IM.Insert) -> None:
-
-
-
-
     def _coalesce(self, insert: IM.Insert) -> None:
         """Merge insert statements for same table, same columns"""
         existing = self.get_inserts(insert.name)
@@ -72,7 +67,7 @@ class ComparisonRepo:
 
         if not updated:
             existing.append(insert)
-            self.inserts[insert.name] = insert
+            self.inserts[insert.name] = existing
 
     def post_process(self):
         """Post-processing: updates pks, auto_inc, and inserts"""
@@ -83,7 +78,7 @@ class ComparisonRepo:
             elif isinstance(im, IM.Modification):
                 self._update_columns(im)
             elif isinstance(im, IM.Insert):
-                self.coalesce(im)
+                self._coalesce(im)
 
     def get_table(self, name: str) -> IM.Table:
         """Returns a table by name"""
@@ -93,4 +88,4 @@ class ComparisonRepo:
         return tbl
 
     def get_inserts(self, name: str) -> List[IM.Insert]:
-        return self.inserts.get(name, default=[])
+        return self.inserts.get(name, [])

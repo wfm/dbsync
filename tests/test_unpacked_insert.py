@@ -35,6 +35,3 @@ class TestUnpackedInsert(unittest.TestCase):
             [8, 9, 10]
         ]
         self.assertListEqual(nodups.values, v3, "Unpacked without duplicates")
-
-
-unittest.main()
