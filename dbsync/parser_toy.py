@@ -151,9 +151,10 @@ def main():
         text_l = sqlparse.split(f.read())
 
     repo = process_statements(text_l)
+    repo.post_process()
 
-    print("Parsed statements:")
-    for p in repo.parsed:
-        print(p)
+    # print("Parsed statements:")
+    # for p in repo.parsed:
+    #     print(p)
 
     return 0
