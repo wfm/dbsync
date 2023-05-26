@@ -23,6 +23,7 @@ def get_id_list_tokens(il: sql.IdentifierList) -> List[sql.Token]:
                 print("il:", repr(item))
             tokens.append(item)
         except StopIteration:
+            identifiers.close()
             break
 
     return tokens
@@ -38,6 +39,7 @@ def get_flattened_tokens(tl: sql.TokenList) -> List[sql.Token]:
                 print("fl", repr(item))
             tokens.append(item)
         except StopIteration:
+            flat.close()
             break
 
     return tokens

@@ -35,3 +35,38 @@ class TestUnpackedInsert(unittest.TestCase):
             [8, 9, 10]
         ]
         self.assertListEqual(nodups.values, v3, "Unpacked without duplicates")
+
+    def test_generator(self):
+        name = "test_table"
+        cols = ["f1", "f2", "f3", "f4"]
+        pk = ["f1", "f2"]
+        table = IM.Table(name, [], pk)
+
+        v = [
+            ["1", "2", "3", "4"],
+            ["5", "6", "7", "8"],
+            ["9", "a", "b", "c"],
+            ["d", "e", "f", "0"]
+        ]
+        ins = IM.Insert(name, cols, v)
+        ui = UnpackedInsert(table, ins)
+
+        gen = ui.values_gen()
+        for i in range(len(v)):
+            t = next(gen)
+            self.assertEqual(t.key, (v[i][0], v[i][1]), f"Key {i}")
+
+            self.assertDictEqual(
+                t.insert_vals,
+                dict(zip(cols, v[i])),
+                f"Insert vals {i}")
+
+            self.assertDictEqual(
+                t.update_vals,
+                dict(zip(cols[2:], v[i][2:])),
+                f"Update vals {i}")
+
+        with self.assertRaises(StopIteration):
+            next(gen)
+
+        gen.close()

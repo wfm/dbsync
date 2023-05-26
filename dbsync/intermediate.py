@@ -41,6 +41,17 @@ class Column(NameMixin):
     auto_inc: bool = field(default_factory=bool)
     auto_inc_val: int = field(default_factory=int)
 
+    # TODO we added the auto_increment stuff to the modifiers field
+    def generate_sql(self) -> str:
+        m = re.search(r"^(.+?) AUTO_INCREMENT", self.modifiers)
+        if m:
+            modstr = m.group(1)
+        else:
+            modstr = self.modifiers
+
+        sql = f"  `{self.name}` {self.datatype} {modstr},"
+        return sql
+
 
 @dataclass
 class Table(Intermediate, NameMixin):
@@ -61,6 +72,23 @@ class Table(Intermediate, NameMixin):
             raise DbSyncCompareException(msg)
         return col[0]
 
+    def generate_sql(self, alt_name=None):
+        sql = []
+        if alt_name is None:
+            table_name = self.name
+        else:
+            table_name = alt_name
+
+        sql.append(f"CREATE TABLE `{table_name}` (")
+        for col in self.columns:
+            sql.append(col.generate_sql())
+        # get rid of final comma
+        sql[-1:][0].rstrip(",")
+        # TODO should get all this crap from the prod table definition
+        sql.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 \
+                   COLLATE=utf8mb4_unicode_520_ci;")
+        return "\n".join(sql)
+
 
 @dataclass
 class Insert(Intermediate, NameMixin):
@@ -73,6 +101,22 @@ class Insert(Intermediate, NameMixin):
 class Set(Intermediate):
     """Represents a set statement"""
     value: str
+
+    def generate_sql(self):
+        # value is SET X = Y
+        return f"SET {self.value}"
+
+
+@dataclass
+class Use(Intermediate):
+    """Represents a USE statement"""
+    value: str
+
+    def generate_sql(self):
+        """Returns a USE and START TRANSACTION"""
+        return f"""USE {self.value};
+-- Note: there is no commit at the end of the file
+START TRANSACTION;"""
 
 
 @dataclass

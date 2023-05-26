@@ -1,4 +1,6 @@
 import sys
+import re
+
 import sqlparse
 from sqlparse import sql
 from sqlparse import tokens as T
@@ -13,7 +15,7 @@ from dbsync.parsing.create_table_statement import create_table
 from dbsync.parsing.utilities \
     import match_tokens, get_id_list_tokens
 from dbsync.comparing.comparison_repo import ComparisonRepo
-
+from dbsync.comparing.comparison import Comparison
 
 def get_values(tokens: sql.TokenList, column_count: int) -> List[List[str]]:
     """ Gets the values from an insert statement """
@@ -88,6 +90,11 @@ def set_statement(ss: SqlStatement) -> IM.Set:
     raise DbSyncParseException("Invalid SET statement")
 
 
+def use_statement(ss: SqlStatement) -> IM.Use:
+    t = ss.get_token()
+    return IM.Use(t.value)
+
+
 def process_statements(text_l):
     in_target = False
     before_use = True
@@ -119,13 +126,15 @@ def process_statements(text_l):
                     add_parsed(lambda p=ss: set_statement(p))
             elif t.match(T.DML, "START"):
                 # don't think we need this
+                print("-- START TRANSACTION")
                 continue
             elif t.match(T.Keyword, "USE"):
-                t = ss.get_token()
+                t = ss.peek_token()
                 dbname = t.value
                 in_target = dbname == C.TARGET_DATABASE
                 before_use = False
-                print("db:", dbname, "in_target:", in_target)
+                print("-- db:", dbname, "in_target:", in_target)
+                add_parsed(lambda p=ss: use_statement(p))
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
             elif in_target:
@@ -151,10 +160,29 @@ def main():
         text_l = sqlparse.split(f.read())
 
     repo = process_statements(text_l)
-    repo.post_process()
 
-    # print("Parsed statements:")
+    #print("Parsed statements:")
     # for p in repo.parsed:
     #     print(p)
+    # for x in repo:
+    #     if getattr(x, "name", None) is not None:
+    #         print(f"{type(x)} {x.name}")
+
+    datatypes = {}
+
+    # for x in repo:
+    #     if isinstance(x, IM.Table):
+    #         for c in x.columns:
+    #             # ^(.+?)(\()\d+(\))?
+    #             dt = re.sub(r"\([\d,]+\)$", r"", c.datatype)
+    #             datatypes[dt] = 1
+
+    #     l = list(datatypes.keys())
+    #     l.sort()
+    # print(l)
+
+    repo.post_process()
+    c = Comparison(repo, "output.sql")
+    c.compare()
 
     return 0

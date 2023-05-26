@@ -4,6 +4,7 @@ import re
 from typing import List, Dict
 
 from dbsync import intermediate as IM
+from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
 
 
@@ -15,11 +16,17 @@ class ComparisonRepo:
         # statments in the order in which they occur in the file
         self.parsed: List[IM.Intermediate] = []
         # DDL to create tables, by table name
-        self.tables: Dict(str, IM.Table) = {}
+        self.tables: Dict[str, IM.Table] = {}
         # Insert statments after they have been coalesced
-        self.inserts: Dict(str, IM.Insert) = {}
+        self.inserts: Dict[str, List[UnpackedInsert]] = {}
         # used to output tables in correct order
         self.order = 0
+
+    def __iter__(self):
+        """Iterates through the list of parsed statements"""
+        # not 100% sure what I'm doing here
+        for p in self.parsed:
+            yield p
 
     def append(self, item: IM.Intermediate) -> None:
         """Appends the representation of a SQL statement to the repo"""
@@ -54,31 +61,39 @@ class ComparisonRepo:
         else:
             col.auto_inc = False
 
-    def _coalesce(self, insert: IM.Insert) -> None:
+    def _add_insert(self, insert: IM.Insert) -> None:
         """Merge insert statements for same table, same columns"""
+        table = self.get_table(insert.name)
         existing = self.get_inserts(insert.name)
+        unpacked = UnpackedInsert(table, insert)
         updated = False
         for e in existing:
             if insert.columns == e.columns:
-                e.values += insert.values
-                # do we need to remove values with duplicate keys?
+                e.values += unpacked.values
+                e.dedup()
                 updated = True
                 break
 
         if not updated:
-            existing.append(insert)
+            existing.append(unpacked)
             self.inserts[insert.name] = existing
 
     def post_process(self):
         """Post-processing: updates pks, auto_inc, and inserts"""
-        print(f"Table: {', '.join(self.tables.keys())}")
         for im in self.parsed:
             if isinstance(im, IM.PrimaryKey):
                 self._add_pk(im)
             elif isinstance(im, IM.Modification):
                 self._update_columns(im)
-            elif isinstance(im, IM.Insert):
-                self._coalesce(im)
+
+        # need to update the tables before we can do this
+        for im in self.parsed:
+            if isinstance(im, IM.Insert):
+                self._add_insert(im)
+
+    def get_table_names(self) -> List[str]:
+        """Returns a list of the table names"""
+        return list(self.tables.keys())
 
     def get_table(self, name: str) -> IM.Table:
         """Returns a table by name"""
@@ -87,5 +102,6 @@ class ComparisonRepo:
             raise DbSyncCompareException(f"No table \"{name}\"")
         return tbl
 
-    def get_inserts(self, name: str) -> List[IM.Insert]:
+    def get_inserts(self, name: str) -> List[UnpackedInsert]:
+        """Gets the insert statements into a particular table"""
         return self.inserts.get(name, [])
