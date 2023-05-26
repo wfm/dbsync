@@ -1,6 +1,5 @@
 """Compares data between the prod and staging databases"""
 
-import re
 from dataclasses import dataclass
 from typing import List, Dict
 
@@ -15,25 +14,11 @@ class InsertDiffs:
     additions: List[Dict[str, str]]
     updates: List[InsertRecord]
 
-    _numeric_type_re = re.compile(r"^(bigint|decimal|double|int|mediumint|smallint|tinyint|varbinary)", flags=re.IGNORECASE)
-    _null_value_re = re.compile(r"NULL", flags=re.IGNORECASE)
 
     def _pluralize(self, n: int, s: str) -> str:
         if n == 1:
             return s
         return s + "s"
-
-    def _format(self, col: str, val: str) -> str:
-        """formats string in values clause"""
-        # duh, I think the things that need to be quoted are already quoted
-        return val
-        # add quotes to anything that isn't a number or NULL
-        # column = self.dst_table.get_column(col)
-        # if InsertDiffs._numeric_type_re.match(column.datatype) or \
-        #    InsertDiffs._null_value_re.match(val):
-        #     return val
-
-        # return f"'{val}'"
 
     def _add_semicolon(self, sql: List[str]) -> None:
         """replace trailing comma with a semicolon"""
@@ -58,7 +43,7 @@ class InsertDiffs:
         col_str = ", ".join(dst_cols)
         sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
         for add in self.additions:
-            values = [self._format(col, val) for col, val in add.items()]
+            values = [val for val in add.values()]
             sql.append(f"({', '.join(values)}),")
         self._add_semicolon(sql)
         return sql
@@ -150,8 +135,6 @@ class CompareInsert:
                 # TODO use a timestamp column to decide whether or not to update
                 # TODO use separate InsertRecord and UpdateRecord?
                 update.append(InsertRecord(src_item.key, None, src_item.key_vals, src_item.update_vals))
-                # -- OR --
-                # update.append(InsertRecord(dst_item.key, None, dst_item.update_vals))
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()

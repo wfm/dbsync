@@ -112,9 +112,12 @@ class Use(Intermediate):
     """Represents a USE statement"""
     value: str
 
+    def __post_init__(self):
+        self.value = Quoted.fix_name(self.value)
+
     def generate_sql(self):
         """Returns a USE and START TRANSACTION"""
-        return f"""USE {self.value};
+        return f"""USE `{self.value}`;
 -- Note: there is no commit at the end of the file
 START TRANSACTION;"""
 

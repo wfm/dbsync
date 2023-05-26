@@ -29,13 +29,27 @@ class UnpackedInsert:
             print(f"*** UI table: {self.name}, pks: {','.join(self.primary_keys)}, cols: {','.join(self.columns)}")
 
         self.values = self._unpack(insert.values)
-        self.key_getter = itemgetter(*self.primary_keys)
+        self._key_getter = itemgetter(*self.primary_keys)
         self.nonkeys = [x for x in self.columns if x not in self.primary_keys]
-        self.nonkey_getter = itemgetter(*self.nonkeys)
+        self._nonkey_getter = itemgetter(*self.nonkeys)
 
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
         return [list(d.values()) for d in values]
+
+    def apply_getter(self, values, getter):
+        result = getter(values)     # this is returning a tuple, dunno why
+        if isinstance(result, tuple):
+            return list(result)
+        elif isinstance(result, list):
+            return result
+        return [result]
+
+    def get_key(self, values):
+        return self.apply_getter(values, self._key_getter)
+
+    def get_non_key(self, values):
+        return self.apply_getter(values, self._nonkey_getter)
 
     def append(self, insert: IM.Insert) -> None:
         u = self._unpack(insert.values)
@@ -51,6 +65,7 @@ class UnpackedInsert:
     def dedup(self) -> None:
         """Sort and removed duplicates"""
         #
+        # TODO re sorting
         # The sort will use the collating sequence for strings
         # so numeric columns won't be in numeric order. I'm
         # not sure this is a bad thing.
@@ -61,11 +76,11 @@ class UnpackedInsert:
             return
 
         filtered = []
-        self.values.sort(key=self.key_getter)
+        self.values.sort(key=self._key_getter)
         i = 0
-        curr = self.key_getter(self.values[0])
+        curr = self.get_key(self.values[0])
         while i < len(self.values) - 1:
-            succ = self.key_getter(self.values[i+1])
+            succ = self.get_key(self.values[i+1])
             if curr != succ:
                 filtered.append(self.values[i])
             i += 1
@@ -74,19 +89,28 @@ class UnpackedInsert:
         filtered.append(self.values[-1])
         self.values = filtered
 
-    def _get_key_values(self, v: Dict[str, str]) -> Dict[str, str]:
-        vals = self.key_getter(v)
-        return dict(zip(self.primary_keys, vals))
+    def _get_key_values_dict(self, vals: List[str]) -> Dict[str, str]:
+        print(f"key cols: {self.primary_keys}")
+        print(f"key vals: {vals}")
+        return dict(zip(self.primary_keys, vals, strict=True))
 
-    def _get_nonkey_values(self, v: Dict[str, str]) -> Dict[str, str]:
-        nonkey_vals = self.nonkey_getter(v)
-        return dict(zip(self.nonkeys, nonkey_vals))
+    def _get_nonkey_values_dict(self, v: Dict[str, str]) -> Dict[str, str]:
+        nonkey_vals = self.get_non_key(v)
+        key_vals = self.get_key(v)  # TODO temporary
+        print(f"key cols: {self.primary_keys}")
+        print(f"key vals: {key_vals}")
+        print(f"together: {self._get_key_values_dict(key_vals)}")
+        print(f"non-key cols ({len(self.nonkeys)}): {self.nonkeys}")
+        print(f"non-key vals ({len(nonkey_vals)}): {nonkey_vals}")
+        return dict(zip(self.nonkeys, nonkey_vals, strict=True))
 
     # TODO maybe use __iter__ ????
     def values_gen(self) -> Iterator[InsertRecord]:
         """Generator yielding keys and values from the insert statement"""
         for v in self.values:
-            key = self.key_getter(v)
-            kv = self._get_key_values(v)
-            upd = self._get_nonkey_values(v)
-            yield InsertRecord(key, v, kv, upd)
+            key = self.get_key(v)
+            kv = self._get_key_values_dict(key)
+            upd = self._get_nonkey_values_dict(v)
+            ir = InsertRecord(key, v, kv, upd)
+            print(f"*** row: {repr(v)}\n***  ir: {repr(dict(key=key,key_vals=kv))}\n----------------------")
+            yield ir

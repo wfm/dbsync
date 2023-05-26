@@ -6,6 +6,7 @@ from sqlparse import sql
 from sqlparse import tokens as T
 from typing import List
 
+from dbsync.settings import Settings
 from dbsync.exceptions import DbSyncException, DbSyncParseException
 from dbsync import constants as C
 from dbsync import intermediate as IM
@@ -95,7 +96,7 @@ def use_statement(ss: SqlStatement) -> IM.Use:
     return IM.Use(t.value)
 
 
-def process_statements(text_l):
+def process_statements(text_l, target_database):
     in_target = False
     before_use = True
     repo = ComparisonRepo()
@@ -126,15 +127,13 @@ def process_statements(text_l):
                     add_parsed(lambda p=ss: set_statement(p))
             elif t.match(T.DML, "START"):
                 # don't think we need this
-                print("-- START TRANSACTION")
                 continue
             elif t.match(T.Keyword, "USE"):
-                t = ss.peek_token()
-                dbname = t.value
-                in_target = dbname == C.TARGET_DATABASE
+                us = use_statement(ss)
+                repo.append(us)
+                in_target = us.value == target_database
                 before_use = False
-                print("-- db:", dbname, "in_target:", in_target)
-                add_parsed(lambda p=ss: use_statement(p))
+                print("-- db:", us.value, "in_target:", in_target)
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
             elif in_target:
@@ -159,7 +158,7 @@ def main():
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
 
-    repo = process_statements(text_l)
+    repo = process_statements(text_l, Settings.obj().db_name)
 
     #print("Parsed statements:")
     # for p in repo.parsed:
@@ -168,7 +167,7 @@ def main():
     #     if getattr(x, "name", None) is not None:
     #         print(f"{type(x)} {x.name}")
 
-    datatypes = {}
+    # datatypes = {}
 
     # for x in repo:
     #     if isinstance(x, IM.Table):
@@ -182,7 +181,7 @@ def main():
     # print(l)
 
     repo.post_process()
-    c = Comparison(repo, "output.sql")
+    c = Comparison(repo, Settings.obj().output_file)
     c.compare()
 
     return 0

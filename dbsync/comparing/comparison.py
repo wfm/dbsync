@@ -9,13 +9,10 @@ from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.compare_insert import CompareInsert, InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
+from dbsync.settings import Settings
 
-# In Bluehost's staging scheme, the prod tables
-# are copied to tables with the prefix "staging_"
-# To keep things simple, we'll always update the
-# "staging" tables from the prod tables.
-DST_PREFIX = "staging_"
-DST_REGEX = re.compile(r"^staging_")
+# DST_PREFIX = "staging_"
+# DST_REGEX = re.compile(r"^staging_")
 
 
 class Comparison:
@@ -40,16 +37,20 @@ class Comparison:
         return callable(x)
 
     def _sanity_check(self, pair: tuple) -> None:
-        # TODO
+        # TODO throw an exception if the columns are different
         pass
 
     def output_table(self, table: IM.Table) -> None:
         # we don't want to output the table DDL
         # just the insert and update statements
-        if not DST_REGEX.search(table.name):
+        dst_prefix = Settings.obj().dst_prefix
+        dst_regex = re.compile(f"^{dst_prefix}")
+
+        if not dst_regex.search(table.name):
             self.table_seen[table.name] = True
             self._write(f"-- Prod table {table.name}")
-            dst_name = DST_PREFIX + table.name
+            # TODO use src_prefix (would need to remove it here)
+            dst_name = dst_prefix + table.name
             dst = self.repo.get_table(dst_name)
             if dst is not None:
                 self.table_seen[dst_name] = True

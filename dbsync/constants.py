@@ -16,6 +16,3 @@ PRIMARY_TOKEN = sql.Token(T.Keyword, "PRIMARY")
 KEY_TOKEN = sql.Token(T.Keyword, "KEY")
 MODIFY_TOKEN = sql.Token(T.Keyword, "MODIFY")
 AUTO_INCREMENT_TOKEN = sql.Token(T.Keyword, "AUTO_INCREMENT")
-
-# TODO make this a command line argument
-TARGET_DATABASE = "`maryjoya_WP5Z2`"
