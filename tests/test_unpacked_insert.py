@@ -54,7 +54,7 @@ class TestUnpackedInsert(unittest.TestCase):
         gen = ui.values_gen()
         for i in range(len(v)):
             t = next(gen)
-            self.assertEqual(t.key, (v[i][0], v[i][1]), f"Key {i}")
+            self.assertEqual(t.key, [v[i][0], v[i][1]], f"Key {i}")
 
             self.assertDictEqual(
                 t.insert_vals,

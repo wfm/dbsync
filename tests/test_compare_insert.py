@@ -1,4 +1,5 @@
 import pytest
+from typing import List, Dict, Callable
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
@@ -11,25 +12,25 @@ PK_COLUMNS = ["f1", "f2"]
 # won't have quotes around them in the sql. The sort order
 # is messed up though. I added leading 0s to compensate.
 INSERT_DATA = [
-    ["01", "2", "3", "4"],
-    ["05", "6", "7", "8"],
-    ["09", "a", "b", "c"],
-    ["13", "e", "f", "g"],
-    ["17", "i", "j", "k"],
-    ["21", "m", "n", "o"],
-    ["25", "q", "r", "s"],
-    ["29", "u", "v", "w"]
+    ["01", "'2'", "'3'", "'4'"],
+    ["05", "'6'", "'7'", "'8'"],
+    ["09", "'a'", "'b'", "'c'"],
+    ["13", "'e'", "'f'", "'g'"],
+    ["17", "'i'", "'j'", "'k'"],
+    ["21", "'m'", "'n'", "'o'"],
+    ["25", "'q'", "'r'", "'s'"],
+    ["29", "'u'", "'v'", "'w'"]
 ]
 DATA_LEN = len(INSERT_DATA)
 MODIFY_DATA = [
-    ["01", "2", "A", "B"],
-    ["05", "6", "C", "D"],
-    ["09", "a", "E", "F"],
-    ["13", "e", "G", "H"],
-    ["17", "i", "I", "J"],
-    ["21", "m", "K", "L"],
-    ["25", "q", "M", "N"],
-    ["29", "u", "O", "P"]
+    ["01", "'2'", "'A'", "'B'"],
+    ["05", "'6'", "'C'", "'D'"],
+    ["09", "'a'", "'E'", "'F'"],
+    ["13", "'e'", "'G'", "'H'"],
+    ["17", "'i'", "'I'", "'J'"],
+    ["21", "'m'", "'K'", "'L'"],
+    ["25", "'q'", "'M'", "'N'"],
+    ["29", "'u'", "'O'", "'P'"]
 ]
 
 
@@ -49,13 +50,14 @@ def table(columns):
 
 
 @pytest.fixture
-def get_unpacked_insert(table):
-    def _get_unpacked_insert(slc, use_modify):
+def get_unpacked_insert(table) -> Callable[[slice, bool], UnpackedInsert]:
+    def _get_unpacked_insert(slc: slice, use_modify: bool) -> UnpackedInsert:
+        print(f"_get_unpacked_insert, slice: {slc}, use_modify: {use_modify}")
         if use_modify:
             data = MODIFY_DATA[slc]
         else:
             data = INSERT_DATA[slc]
-
+        print(f"  data: {data}")
         insert = IM.Insert(TABLE_NAME, COLUMN_NAMES, data)
         return UnpackedInsert(table, insert)
 
@@ -146,14 +148,14 @@ INSERT INTO `test_table` (f1, f2, f3, f4) VALUES
             ),
             # one update
             dict(
-                src_sl=slice(4, 1),
-                dst_sl=slice(4, 1),
+                src_sl=slice(4, 5),
+                dst_sl=slice(4, 5),
                 src_mod=True,
                 dst_mod=False,
                 expected_sql="""-- Updating 1 record:
 UPDATE `test_table`
-SET f3='A', f4='B'
-WHERE f1=01 AND f2='2';"""
+SET f3='I', f4='J'
+WHERE f1=17 AND f2='i';"""
             )
         ]
     }
@@ -194,6 +196,10 @@ WHERE f1=01 AND f2='2';"""
                           get_unpacked_insert, table):
         src = get_unpacked_insert(src_sl, src_mod)
         dst = get_unpacked_insert(dst_sl, dst_mod)
+
+        print(f"src: {repr(src)}")
+        print(f"dst: {repr(dst)}")
+
         ci = CompareInsert()
         ins_diffs = ci.compare(src, dst, table)
         actual_sql = ins_diffs.generate_sql()

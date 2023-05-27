@@ -14,6 +14,8 @@ class InsertDiffs:
     additions: List[Dict[str, str]]
     updates: List[InsertRecord]
 
+    def __post_init__(self):
+        print(f"InsertDiff for table {self.dst_table.name}, additions: {len(self.additions)}, updates: {len(self.updates)}")
 
     def _pluralize(self, n: int, s: str) -> str:
         if n == 1:
@@ -55,6 +57,8 @@ class InsertDiffs:
         sql.append(f"SET {', '.join(assignments)}")
         conditions = [f"{col}={val}" for col, val in record.key_vals.items()]
         sql.append(f"WHERE {' AND '.join(conditions)};")
+        print(f"Update of {record}")
+        print(f"Returns: {sql}")
         return sql
 
     def generate_sql(self):

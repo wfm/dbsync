@@ -25,13 +25,20 @@ class UnpackedInsert:
         # important: use insert cols not table cols
         self.columns = insert.columns
 
-        if (self.primary_keys is None or len(self.primary_keys) == 0):
-            print(f"*** UI table: {self.name}, pks: {','.join(self.primary_keys)}, cols: {','.join(self.columns)}")
-
         self.values = self._unpack(insert.values)
         self._key_getter = itemgetter(*self.primary_keys)
         self.nonkeys = [x for x in self.columns if x not in self.primary_keys]
         self._nonkey_getter = itemgetter(*self.nonkeys)
+
+    def __str__(self):
+        return f"UnpackedInsert for {self.name}"
+
+    def __repr__(self):
+        return f"""{self.__str__()}
+    columns: {self.columns}
+        PKs: {self.primary_keys}
+   non-keys: {self.nonkeys}
+     values: {self.values}"""
 
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
@@ -90,18 +97,10 @@ class UnpackedInsert:
         self.values = filtered
 
     def _get_key_values_dict(self, vals: List[str]) -> Dict[str, str]:
-        print(f"key cols: {self.primary_keys}")
-        print(f"key vals: {vals}")
         return dict(zip(self.primary_keys, vals, strict=True))
 
     def _get_nonkey_values_dict(self, v: Dict[str, str]) -> Dict[str, str]:
         nonkey_vals = self.get_non_key(v)
-        key_vals = self.get_key(v)  # TODO temporary
-        print(f"key cols: {self.primary_keys}")
-        print(f"key vals: {key_vals}")
-        print(f"together: {self._get_key_values_dict(key_vals)}")
-        print(f"non-key cols ({len(self.nonkeys)}): {self.nonkeys}")
-        print(f"non-key vals ({len(nonkey_vals)}): {nonkey_vals}")
         return dict(zip(self.nonkeys, nonkey_vals, strict=True))
 
     # TODO maybe use __iter__ ????
@@ -111,6 +110,4 @@ class UnpackedInsert:
             key = self.get_key(v)
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
-            ir = InsertRecord(key, v, kv, upd)
-            print(f"*** row: {repr(v)}\n***  ir: {repr(dict(key=key,key_vals=kv))}\n----------------------")
-            yield ir
+            yield InsertRecord(key, v, kv, upd)
