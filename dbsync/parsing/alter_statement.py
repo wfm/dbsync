@@ -7,6 +7,7 @@ from dbsync import intermediate as IM
 from dbsync.parsing.sql_statement import SqlStatement
 from dbsync.parsing.create_table_statement import get_columns
 from dbsync.parsing.utilities import match_tokens
+from dbsync.settings import Settings
 
 
 class State(IntEnum):
@@ -58,13 +59,18 @@ class AlterStatement:
                 state = State.ADD
 
         if state == State.PK_SUCCESS:
+            debug = name == "NhU_term_relationships"
+            if debug:
+                print(f"ALTER for table {name}")
             t = ss.get_token()
             if (isinstance(t, sql.Parenthesis)):
                 iss = SqlStatement(None, t)
                 iss.eat_token(C.LPAREN_TOKEN)
                 it = iss.get_token()
                 while it is not None and not match_tokens(it, C.RPAREN_TOKEN):
-                    pk_columns.append(it.value)
+                    if debug:
+                        print(f"PK column: {it.value}")
+                    pk_columns += it.value.split(",")
                     it = iss.get_token()
                 return IM.PrimaryKey(name, pk_columns)
 
@@ -75,6 +81,8 @@ class AlterStatement:
         t = ss.get_token()
         if (isinstance(t, sql.Identifier)):
             name = t.get_name()
+            if not Settings.obj().should_include_table(name):
+                return None
         else:
             raise DbSyncParseException(f"Expected Identifier, got {type(t)}")
 

@@ -8,7 +8,7 @@ from dbsync.exceptions import DbSyncCompareException
 
 
 class Quoted:
-    _re = re.compile(r"^`(.+)`$")
+    _re = re.compile(r"^\s*`?(.+?)`?\s*$")
 
     @classmethod
     def fix_name(cls, name):
@@ -111,12 +111,16 @@ class Set(Intermediate):
 class Use(Intermediate):
     """Represents a USE statement"""
     value: str
+    is_target: bool = field(default=False)
 
     def __post_init__(self):
         self.value = Quoted.fix_name(self.value)
 
     def generate_sql(self):
         """Returns a USE and START TRANSACTION"""
+        if not self.is_target:
+            return ""
+
         return f"""USE `{self.value}`;
 -- Note: there is no commit at the end of the file
 START TRANSACTION;"""

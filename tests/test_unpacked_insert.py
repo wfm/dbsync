@@ -58,12 +58,12 @@ class TestUnpackedInsert(unittest.TestCase):
 
             self.assertDictEqual(
                 t.insert_vals,
-                dict(zip(cols, v[i])),
+                dict(zip(cols, v[i], strict=True)),
                 f"Insert vals {i}")
 
             self.assertDictEqual(
                 t.update_vals,
-                dict(zip(cols[2:], v[i][2:])),
+                dict(zip(cols[2:], v[i][2:], strict=True)),
                 f"Update vals {i}")
 
         with self.assertRaises(StopIteration):

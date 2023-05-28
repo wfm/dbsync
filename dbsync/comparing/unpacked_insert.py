@@ -20,15 +20,23 @@ class UnpackedInsert:
     """An "unpacked" version of an insert statement"""
     def __init__(self, table: IM.Table, insert: IM.Insert):
         self.name = table.name
-        # TODO having a problem with a table without pks
-        self.primary_keys = table.primary_keys
         # important: use insert cols not table cols
         self.columns = insert.columns
-
         self.values = self._unpack(insert.values)
-        self._key_getter = itemgetter(*self.primary_keys)
+
+        self.primary_keys = table.primary_keys
+        if len(self.primary_keys) == 0:
+            print(f"Table {self.name} has no primary key columns")
+            self._key_getter = None
+        else:
+            self._key_getter = itemgetter(*self.primary_keys)
+
         self.nonkeys = [x for x in self.columns if x not in self.primary_keys]
-        self._nonkey_getter = itemgetter(*self.nonkeys)
+        if len(self.nonkeys) == 0:
+            print(f"Table {self.name} has no non-primary key columns")
+            self._nonkey_getter = None
+        else:
+            self._nonkey_getter = itemgetter(*self.nonkeys)
 
     def __str__(self):
         return f"UnpackedInsert for {self.name}"
@@ -45,6 +53,9 @@ class UnpackedInsert:
         return [list(d.values()) for d in values]
 
     def apply_getter(self, values, getter):
+        if getter is None:
+            return []
+
         result = getter(values)     # this is returning a tuple, dunno why
         if isinstance(result, tuple):
             return list(result)
@@ -63,7 +74,7 @@ class UnpackedInsert:
         self.values += u
 
     def _unpack(self, values: List[List[str]]) -> List[Dict[str, str]]:
-        return [dict(zip(self.columns, v)) for v in values]
+        return [dict(zip(self.columns, v, strict=True)) for v in values]
 
     def pack(self) -> IM.Insert:
         packed_vals = UnpackedInsert.pack_values(self.values)
@@ -83,7 +94,21 @@ class UnpackedInsert:
             return
 
         filtered = []
-        self.values.sort(key=self._key_getter)
+        try:
+            self.values.sort(key=self._key_getter)
+        except KeyError as ke:
+            print(f"KeyError on table {self.name}")
+            print(f"  keys are: {self.primary_keys}")
+            print("  Offending data:")
+            for v in self.values:
+                try:
+                    _ = self._key_getter(v)
+                except:
+                    print(repr(v))
+                    break
+
+            raise ke
+
         i = 0
         curr = self.get_key(self.values[0])
         while i < len(self.values) - 1:

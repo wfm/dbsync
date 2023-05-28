@@ -11,6 +11,7 @@ from dbsync import intermediate as IM
 from dbsync.parsing.sql_statement import SqlStatement
 from dbsync.parsing.utilities \
     import match_tokens, get_flattened_tokens, get_id_list_tokens
+from dbsync.settings import Settings
 
 
 def get_columns(tl: sql.TokenList) -> List[IM.Column]:
@@ -117,6 +118,9 @@ def create_table(ss: SqlStatement) -> IM.Table:
     t = ss.get_token()
     if isinstance(t, sql.Identifier):
         name = t.value
+        if not Settings.obj().should_include_table(name):
+            return None
+
         t = ss.get_token()
         if isinstance(t, sql.Parenthesis):
             cols = get_columns(t)

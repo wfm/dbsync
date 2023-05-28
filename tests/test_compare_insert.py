@@ -174,7 +174,7 @@ WHERE f1=17 AND f2='i';"""
         actual_data = self._pack(actual.additions)
 
         if actual_data != INSERT_DATA[add_sl]:
-            for zz in zip(actual_data, INSERT_DATA[add_sl]):
+            for zz in zip(actual_data, INSERT_DATA[add_sl], strict=True):
                 print(f"act: {zz[0]}, exp: {zz[1]}")
 
         assert actual_data == INSERT_DATA[add_sl], "actual_data"            # noqa: S101, E501

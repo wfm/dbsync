@@ -14,9 +14,6 @@ class InsertDiffs:
     additions: List[Dict[str, str]]
     updates: List[InsertRecord]
 
-    def __post_init__(self):
-        print(f"InsertDiff for table {self.dst_table.name}, additions: {len(self.additions)}, updates: {len(self.updates)}")
-
     def _pluralize(self, n: int, s: str) -> str:
         if n == 1:
             return s
@@ -39,8 +36,6 @@ class InsertDiffs:
         l = len(self.additions)
         r = self._pluralize(l, "row")
         sql.append(f"-- Inserting {l} {r}:")
-        # TODO blows up here
-        # dst_cols = [list(a.keys()) for a in self.additions[0]]
         dst_cols = list(self.additions[0].keys())
         col_str = ", ".join(dst_cols)
         sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
@@ -57,8 +52,6 @@ class InsertDiffs:
         sql.append(f"SET {', '.join(assignments)}")
         conditions = [f"{col}={val}" for col, val in record.key_vals.items()]
         sql.append(f"WHERE {' AND '.join(conditions)};")
-        print(f"Update of {record}")
-        print(f"Returns: {sql}")
         return sql
 
     def generate_sql(self):
@@ -101,11 +94,14 @@ class CompareInsert:
     @classmethod
     def compare(
             cls,
-            src: UnpackedInsert,
+            src: UnpackedInsert | None,
             dst: UnpackedInsert | None,
             dst_table: IM.Table) -> InsertDiffs:
 
+        if src is None:
+            return InsertDiffs(dst_table, [], [])
         srcgen = Generator(src)
+
         if dst is None:
             dstgen = None
         else:
@@ -115,7 +111,11 @@ class CompareInsert:
         update = []
 
         src_item = srcgen.get_next_item()
-        dst_item = dstgen.get_next_item()
+        if dstgen is None or not dstgen.is_open:
+            dst_item = None
+        else:
+            dst_item = dstgen.get_next_item()
+
         while srcgen.is_open:
             if dstgen is None or not dstgen.is_open or \
                src_item.key < dst_item.key:
