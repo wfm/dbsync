@@ -1,8 +1,9 @@
 """Matches up tables and compares the structure and data"""
 
+from io import TextIOWrapper
 import re
 from datetime import datetime
-from typing import Dict, List
+from typing import List
 
 from dbsync import intermediate as IM
 from dbsync.comparing.comparison_repo import ComparisonRepo
@@ -12,7 +13,10 @@ from dbsync.settings import Settings
 
 
 class Comparison:
-    def __init__(self, repo: ComparisonRepo, filename: str = None) -> None:
+    def __init__(self,
+                 repo: ComparisonRepo,
+                 filename: str = None,
+                 fd: TextIOWrapper = None) -> None:
         self.repo = repo
         self.filename = filename
         if self.filename is None:
@@ -20,8 +24,6 @@ class Comparison:
         else:
             self.fd = open(filename, mode="w", encoding="utf-8")
             self._write(f"-- dbsync started at {datetime.now()}")
-        self.first_table = True
-        self.table_seen: Dict[str, bool] = {}
 
     def _write(self, text: str) -> None:
         if self.fd is None:
@@ -50,19 +52,17 @@ class Comparison:
         if not Settings.obj().should_include_table(table.name):
             return
 
+        src_inserts = self.repo.get_inserts(table.name)
         # we don't want to output the table DDL
         # just the insert and update statements
         dst_prefix = Settings.obj().dst_prefix
         dst_regex = re.compile(f"^{dst_prefix}")
 
         if not dst_regex.search(table.name):
-            self.table_seen[table.name] = True
-            # TODO use src_prefix (would need to remove it here)
             dst_name = dst_prefix + table.name
             dst = self.repo.get_table(dst_name)
+            # dumb: get_table raises an exception if the table doesn't exist
             if dst is not None:
-                self.table_seen[dst_name] = True
-                src_inserts = self.repo.get_inserts(table.name)
                 dst_inserts = self.repo.get_inserts(dst_name)
                 # TODO this is too dumb.
                 self._pad_inserts(src_inserts, dst_inserts)
