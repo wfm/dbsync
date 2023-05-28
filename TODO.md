@@ -2,6 +2,7 @@
 * Look at "this is too dumb" in comparison.py
 * use a timestamp column to decide whether or not to update
 * Only output required columns for update statements
+* Break up inserts into groups (of 50? 100?)
 * Does it matter that we sort everything like a string when there are numeric PK columns?
 - it would be easy to parse the ints...
 * Integration tests
@@ -10,12 +11,16 @@
 * Put settings in a file
 * Parse settings at end of create table
 * Refactoring
-- Complexity issues
-- Get rid of "parser_toy"
+  - Complexity issues
+  - Get rid of "parser_toy"
 * Use separate InsertRecord and UpdateRecord?
 * Do we need backticks on column names?
 * Linter errors
-- increase line length
+ - increase line length
+* Implement stage -> prod
+* Implement sync between 2 databases
+* Support more flavors of insert statements
+* Support other DML statements?
 
 > 16 results - 6 files
 > 

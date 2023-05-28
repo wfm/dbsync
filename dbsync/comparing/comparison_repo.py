@@ -28,6 +28,15 @@ class ComparisonRepo:
         for p in self.parsed:
             yield p
 
+    def __repr__(self):
+        return f"""Parsed statements:
+{self.parsed}
+Tables:
+{self.tables}
+Insert statements:
+{self.inserts}
+"""
+
     def append(self, item: IM.Intermediate) -> None:
         """Appends the representation of a SQL statement to the repo"""
         self.parsed.append(item)

@@ -1,9 +1,10 @@
 """Matches up tables and compares the structure and data"""
 
-from io import TextIOWrapper
 import re
+from io import TextIOWrapper
 from datetime import datetime
-from typing import List
+from typing import List, Tuple
+from operator import itemgetter
 
 from dbsync import intermediate as IM
 from dbsync.comparing.comparison_repo import ComparisonRepo
@@ -35,62 +36,49 @@ class Comparison:
         x = getattr(obj, name, None)
         return callable(x)
 
-    def _sanity_check(self, pair: tuple) -> None:
-        # TODO throw an exception if the columns are different
-        pass
+    def _pair_inserts(self,
+                      src_inserts: List[UnpackedInsert],
+                      dst_inserts: List[UnpackedInsert]) \
+            -> List(Tuple(IM.Insert, IM.Insert)):
+        src_inserts.sort(UnpackedInsert.by_columns_and_pks)
+        dst_inserts.sort(UnpackedInsert.by_columns_and_pks)
 
-    def _pad_inserts(self,
-                     src_inserts: List[UnpackedInsert | None],
-                     dst_inserts: List[UnpackedInsert | None]) -> None:
-        while len(src_inserts) < len(dst_inserts):
-            src_inserts.append(None)
+        pairs = []
+        while len(src_inserts) > 0:
+            src = src_inserts.pop(0)
 
-        while len(dst_inserts) < len(src_inserts):
-            dst_inserts.append(None)
+        return pairs
 
     def output_table(self, table: IM.Table) -> None:
         if not Settings.obj().should_include_table(table.name):
             return
 
-        src_inserts = self.repo.get_inserts(table.name)
         # we don't want to output the table DDL
         # just the insert and update statements
         dst_prefix = Settings.obj().dst_prefix
-        dst_regex = re.compile(f"^{dst_prefix}")
+        if not re.search(f"^{dst_prefix}", table.name):
+            # this is not a src table
+            return
 
-        if not dst_regex.search(table.name):
-            dst_name = dst_prefix + table.name
-            dst = self.repo.get_table(dst_name)
-            # dumb: get_table raises an exception if the table doesn't exist
+        src_inserts = self.repo.get_inserts(table.name)
+        dst_name = dst_prefix + table.name
+        dst = self.repo.get_table(dst_name)
+        dst_inserts = self.repo.get_inserts(dst_name)
+        pairs = self._pair_inserts(src_inserts, dst_inserts)
+        if len(pairs) > 0:
+            self._write(f"-- Prod table {table.name}")
             if dst is not None:
-                dst_inserts = self.repo.get_inserts(dst_name)
-                # TODO this is too dumb.
-                self._pad_inserts(src_inserts, dst_inserts)
-                pairs = list(zip(src_inserts, dst_inserts, strict=True))
+                self._write(f"-- Staging table {dst_name}")
             else:
-                dst = IM.Table(dst_name, table.columns, table.primary_keys)
-                sql = dst.generate_sql()
+                self._write("-- No staging table found")
+
+            self._write("-- TODO disable pk constraints and auto_increment")
+            for p in pairs:
+                diffs = CompareInsert.compare(p[0], p[1], dst)
+                print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
+                sql = diffs.generate_sql()
                 self._write(sql)
-                src_inserts = self.repo.get_inserts(table.name)
-                pairs = []
-                for i in src_inserts:
-                    pairs.append((i, None))
-
-            if len(pairs) > 0:
-                self._write(f"-- Prod table {table.name}")
-                if dst is not None:
-                    self._write(f"-- Staging table {dst_name}")
-                else:
-                    self._write("-- No staging table found")
-
-                self._write("-- TODO disable pk constraints and auto_increment")
-                for p in pairs:
-                    self._sanity_check(p)
-                    diffs = CompareInsert.compare(p[0], p[1], dst)
-                    print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
-                    sql = diffs.generate_sql()
-                    self._write(sql)
-                self._write("-- TODO enable pk constraints and auto_increment")
+            self._write("-- TODO enable pk constraints and auto_increment")
 
     def output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

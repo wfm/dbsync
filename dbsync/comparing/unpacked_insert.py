@@ -5,6 +5,7 @@ from operator import itemgetter
 from dataclasses import dataclass
 
 from dbsync import intermediate as IM
+from dbsync.exceptions import DbSyncCompareException
 
 
 @dataclass
@@ -49,6 +50,18 @@ class UnpackedInsert:
      values: {self.values}"""
 
     @classmethod
+    def by_columns(cls, item):
+        return itemgetter(item.columns)
+
+    # @classmethod
+    # def by_columns_and_pk(cls, item):
+    #     pk = item._get_min_pk()
+    #     return itemgetter((item.columns, pk))
+
+    # def _get_min_pk(self):
+
+
+    @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
         return [list(d.values()) for d in values]
 
@@ -70,6 +83,9 @@ class UnpackedInsert:
         return self.apply_getter(values, self._nonkey_getter)
 
     def append(self, insert: IM.Insert) -> None:
+        if insert.columns != self.columns:
+            msg = f"Tried to append different shaped Inserts, table {self.name}"
+            raise DbSyncCompareException(msg)
         u = self._unpack(insert.values)
         self.values += u
 
@@ -103,7 +119,7 @@ class UnpackedInsert:
             for v in self.values:
                 try:
                     _ = self._key_getter(v)
-                except:
+                except Exception:
                     print(repr(v))
                     break
 
