@@ -17,7 +17,7 @@ def to_camel(string: str) -> str:
     return first + rest
 
 
-class Settings(BaseModel, allow_mutation=False, alias_generator=to_camel):
+class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     #
     # In Bluehost's staging scheme, the prod tables
     # are copied to tables with the prefix "staging_"
@@ -37,7 +37,8 @@ class Settings(BaseModel, allow_mutation=False, alias_generator=to_camel):
     src_prefix: str = ""
     dst_prefix: str = "staging_"
     tbl_prefix: str = "NhU_"
-    included_tables: List[str] = [
+    included_tables: List[str] = []
+    save_included_tables: List[str] = [
         "options",
         "users",
         "usermeta",
@@ -129,12 +130,18 @@ class Settings(BaseModel, allow_mutation=False, alias_generator=to_camel):
         return include and not exclude
 
     @classmethod
-    def obj(cls):
+    def obj(cls, initial_settings=None):
         # TODO read this from a file
         global _global_config
 
         if _global_config is None:
-            _global_config = cls()
+            if initial_settings is None:
+                _global_config = cls()
+            else:
+                _global_config = initial_settings
+        elif initial_settings is not None:
+            raise DbSyncParseException("You missed your chance to initialize the settings")
+
         return _global_config
 
 

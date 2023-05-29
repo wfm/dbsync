@@ -11,6 +11,7 @@ from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.compare_insert import CompareInsert
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.settings import Settings
+from dbsync.exceptions import DbSyncCompareException
 
 
 class Comparison:
@@ -39,14 +40,16 @@ class Comparison:
     def _pair_inserts(self,
                       src_inserts: List[UnpackedInsert],
                       dst_inserts: List[UnpackedInsert]) \
-            -> List(Tuple(IM.Insert, IM.Insert)):
+            -> List[Tuple[IM.Insert, IM.Insert]]:
         src_inserts.sort(UnpackedInsert.by_columns_and_pks)
         dst_inserts.sort(UnpackedInsert.by_columns_and_pks)
 
-        pairs = []
-        while len(src_inserts) > 0:
-            src = src_inserts.pop(0)
-
+        # still dumb
+        pairs = list(zip(src_inserts, dst_inserts, strict=True))
+        for p in pairs:
+            if p[0].columns != p[1].columns:
+                msg = "Bad pair: {p[0].columns} vs {p[1].columns}"
+                raise DbSyncCompareException(msg)
         return pairs
 
     def output_table(self, table: IM.Table) -> None:
@@ -72,13 +75,13 @@ class Comparison:
             else:
                 self._write("-- No staging table found")
 
-            self._write("-- TODO disable pk constraints and auto_increment")
+            self._write("-- TODO disable auto_increment")
             for p in pairs:
                 diffs = CompareInsert.compare(p[0], p[1], dst)
                 print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
                 sql = diffs.generate_sql()
                 self._write(sql)
-            self._write("-- TODO enable pk constraints and auto_increment")
+            self._write("-- TODO enable auto_increment")
 
     def output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

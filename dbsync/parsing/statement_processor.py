@@ -1,12 +1,8 @@
-import sys
-import time
 from typing import List
 
-import sqlparse
 from sqlparse import sql
 from sqlparse import tokens as T
 
-from dbsync.settings import Settings
 from dbsync.exceptions import DbSyncException, DbSyncParseException
 from dbsync import intermediate as IM
 from dbsync.parsing.sql_statement import SqlStatement
@@ -14,7 +10,6 @@ from dbsync.parsing.alter_statement import AlterStatement
 from dbsync.parsing.create_table_statement import create_table
 from dbsync.parsing.insert_statement import insert_data
 from dbsync.comparing.comparison_repo import ComparisonRepo
-from dbsync.comparing.comparison import Comparison
 
 
 def set_statement(ss: SqlStatement) -> IM.Set:
@@ -27,6 +22,7 @@ def set_statement(ss: SqlStatement) -> IM.Set:
 def use_statement(ss: SqlStatement) -> IM.Use:
     t = ss.get_token()
     return IM.Use(t.value)
+
 
 
 def process_statements(text_l: List[str], target_database: str) -> ComparisonRepo:
@@ -65,8 +61,7 @@ def process_statements(text_l: List[str], target_database: str) -> ComparisonRep
                 us = use_statement(ss)
                 repo.append(us)
                 before_use = False
-                if us.is_target:
-                    us.is_target = us.value == target_database
+                us.is_target = us.value == target_database
 
                 print("-- db:", us.value, "in_target:", us.is_target)
             elif t.match(T.DDL, "ALTER"):
@@ -85,33 +80,3 @@ def process_statements(text_l: List[str], target_database: str) -> ComparisonRep
             print(f"SQL: {text}")
 
     return repo
-
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python -m dbsync <input file>")
-        print("More options coming soon")
-        exit(1)
-
-    filename = sys.argv[1]
-    print("db-compare of", filename)
-    time0 = time.time()
-    with open(filename, "r", encoding="utf8") as f:
-        text_l = sqlparse.split(f.read())
-    time1 = time.time()
-    repo = process_statements(text_l, Settings.obj().db_name)
-    time2 = time.time()
-    repo.post_process()
-    time3 = time.time()
-    c = Comparison(repo, Settings.obj().output_file)
-    c.compare()
-    time4 = time.time()
-
-    print("Timing:")
-    print("  Read and split file : %.2f" % (time1-time0))
-    print("  Process statements  : %.2f" % (time2-time1))
-    print("  Post-Processing     : %.2f" % (time3-time2))
-    print("  Compare and output  : %.2f" % (time4-time3))
-    print("  Total               : %.2f" % (time4-time0))
-
-    return 0
