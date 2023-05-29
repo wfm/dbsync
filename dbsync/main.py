@@ -9,10 +9,10 @@ from dbsync.comparing.comparison import Comparison
 
 
 #
-# Databases
-#   maryjoya_WP5Z2
+# Databases and table prefixs
+#   maryjoya_WP5Z2  NhU_
 #   maryjoya_WPAJC
-#   maryjoya_WPKWA
+#   maryjoya_WPKWA  EMk_
 def get_args():
     settings = Settings()
 
@@ -30,16 +30,22 @@ def get_args():
         help="The name of the database to sync",
         default=settings.db_name)
     argparser.add_argument(
+        "-t", "--table_prefix",
+        help="The Wordpress table prefix",
+        default=settings.tbl_prefix)
+    argparser.add_argument(
         "-o", "--output",
         help="The filename for the SQL output",
         default=settings.output_file)
 
     args = argparser.parse_args()
     settings.db_name = args.database
+    settings.tbl_prefix = args.table_prefix
     settings.output_file = args.output
     Settings.obj(settings)
     print("dbsync from   :", args.filename)
     print("  database    :", args.database)
+    print("  table prefix:", args.table_prefix)
     print("  output file :", args.output)
     return args.filename
 

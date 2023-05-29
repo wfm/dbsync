@@ -59,17 +59,12 @@ class AlterStatement:
                 state = State.ADD
 
         if state == State.PK_SUCCESS:
-            debug = name == "NhU_term_relationships"
-            if debug:
-                print(f"ALTER for table {name}")
             t = ss.get_token()
             if (isinstance(t, sql.Parenthesis)):
                 iss = SqlStatement(None, t)
                 iss.eat_token(C.LPAREN_TOKEN)
                 it = iss.get_token()
                 while it is not None and not match_tokens(it, C.RPAREN_TOKEN):
-                    if debug:
-                        print(f"PK column: {it.value}")
                     pk_columns += it.value.split(",")
                     it = iss.get_token()
                 return IM.PrimaryKey(name, pk_columns)

@@ -62,17 +62,20 @@ def process_statements(text_l: List[str], target_database: str) -> ComparisonRep
                 repo.append(us)
                 before_use = False
                 us.is_target = us.value == target_database
-
+                in_target = us.is_target
                 print("-- db:", us.value, "in_target:", us.is_target)
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
+            elif t.match(T.DML, "COMMIT"):
+                continue
+            elif t.match(T.Punctuation, ";"):
+                continue
             elif in_target:
                 print("Got something else:", repr(t))
                 while t is not None:
                     t = ss.get_token()
                     print(" ", repr(t))
                 print("SQL:", text)
-                exit()
 
         except DbSyncException as err:
             print(f"{type(err)} - {err}")

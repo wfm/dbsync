@@ -28,6 +28,11 @@ class ComparisonRepo:
         for p in self.parsed:
             yield p
 
+    def __str__(self) -> str:
+        return f"Repo statments: {len(self.parsed)}, \
+tables: {len(self.tables)}, \
+inserts: {len(self.inserts)}"
+ 
     def __repr__(self):
         return f"""Parsed statements:
 {self.parsed}

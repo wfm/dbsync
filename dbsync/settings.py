@@ -102,7 +102,9 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
     def __init__(self, **data):
         super().__init__(**data)
+        self.init()
 
+    def init(self):
         pattern = f"^`?({self.src_prefix}|{self.dst_prefix}){self.tbl_prefix}(.+?)`?$"
         self._table_name_regex = re.compile(pattern, flags=re.IGNORECASE)
 
@@ -139,8 +141,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
                 _global_config = cls()
             else:
                 _global_config = initial_settings
+            _global_config.init()
         elif initial_settings is not None:
-            raise DbSyncParseException("You missed your chance to initialize the settings")
+            msg = "You missed your chance to initialize the settings"
+            raise DbSyncParseException(msg)
 
         return _global_config
 

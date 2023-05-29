@@ -21,11 +21,13 @@ class Comparison:
                  fd: TextIOWrapper = None) -> None:
         self.repo = repo
         self.filename = filename
-        if self.filename is None:
-            self.fd = None
-        else:
+        if fd is not None:
+            self.fd = fd
+        elif filename is not None:
             self.fd = open(filename, mode="w", encoding="utf-8")
             self._write(f"-- dbsync started at {datetime.now()}")
+        else:
+            self.fd = None
 
     def _write(self, text: str) -> None:
         if self.fd is None:
@@ -41,10 +43,7 @@ class Comparison:
                       src_inserts: List[UnpackedInsert],
                       dst_inserts: List[UnpackedInsert]) \
             -> List[Tuple[IM.Insert, IM.Insert]]:
-        src_inserts.sort(UnpackedInsert.by_columns_and_pks)
-        dst_inserts.sort(UnpackedInsert.by_columns_and_pks)
-
-        # still dumb
+        # still dumb, but it works for maryjoya_WPKWA
         pairs = list(zip(src_inserts, dst_inserts, strict=True))
         for p in pairs:
             if p[0].columns != p[1].columns:
@@ -59,16 +58,22 @@ class Comparison:
         # we don't want to output the table DDL
         # just the insert and update statements
         dst_prefix = Settings.obj().dst_prefix
-        if not re.search(f"^{dst_prefix}", table.name):
+        if re.search(f"^{dst_prefix}", table.name):
             # this is not a src table
+            print(f"Table {table.name} is a dst table")
             return
 
+        print(f"Table {table.name} is a src table")
         src_inserts = self.repo.get_inserts(table.name)
+        print(f"  It has {len(src_inserts)} insert statements")
         dst_name = dst_prefix + table.name
         dst = self.repo.get_table(dst_name)
         dst_inserts = self.repo.get_inserts(dst_name)
         pairs = self._pair_inserts(src_inserts, dst_inserts)
-        if len(pairs) > 0:
+        for p in pairs:
+            diffs = CompareInsert.compare(p[0], p[1], dst)
+            print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
+            sql = diffs.generate_sql()
             self._write(f"-- Prod table {table.name}")
             if dst is not None:
                 self._write(f"-- Staging table {dst_name}")
@@ -76,11 +81,7 @@ class Comparison:
                 self._write("-- No staging table found")
 
             self._write("-- TODO disable auto_increment")
-            for p in pairs:
-                diffs = CompareInsert.compare(p[0], p[1], dst)
-                print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
-                sql = diffs.generate_sql()
-                self._write(sql)
+            self._write(sql)
             self._write("-- TODO enable auto_increment")
 
     def output_statement(self, statement: IM.Intermediate) -> None:
@@ -89,6 +90,7 @@ class Comparison:
             self._write(text)
 
     def compare(self):
+        print(self.repo)
         for statement in self.repo:
             if isinstance(statement, IM.Table):
                 self.output_table(statement)
