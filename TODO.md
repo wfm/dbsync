@@ -1,5 +1,6 @@
 # TODO
 * Look at "this is too dumb" in comparison.py
+* If there are more than N diffs, truncate the dst table and reload?
 * use a timestamp column to decide whether or not to update
 * Only output required columns for update statements
 * Break up inserts into groups (of 50? 100?)

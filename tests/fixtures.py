@@ -5,8 +5,9 @@ from typing import Callable
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
+from dbsync.settings import Settings
 
-TABLE_NAME = "test_table"
+TABLE_NAME = Settings.obj().tbl_prefix + "test_table"
 COLUMN_NAMES = ["f1", "f2", "f3", "f4"]
 PK_COLUMNS = ["f1", "f2"]
 # col 0 is an "int" column, which just means that the values
@@ -60,6 +61,20 @@ def get_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
         return IM.Insert(TABLE_NAME, COLUMN_NAMES, data)
 
     return _get_insert_stmt
+
+
+@pytest.fixture(scope="module")
+def get_narrow_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
+    def _get_narrow_insert_stmt(slc: slice, use_modify: bool = False) -> IM.Insert:
+        inner_slc = slice(0, len(table.columns)-1)
+        if use_modify:
+            data = MODIFY_DATA
+        else:
+            data = INSERT_DATA
+        data = [inner[inner_slc] for inner in data[slc]]
+        return IM.Insert(TABLE_NAME, COLUMN_NAMES[inner_slc], data)
+
+    return _get_narrow_insert_stmt
 
 
 @pytest.fixture(scope="module")

@@ -4,12 +4,13 @@ import re
 from io import TextIOWrapper
 from datetime import datetime
 from typing import List, Tuple
-from operator import itemgetter
+from operator import attrgetter
 
 from dbsync import intermediate as IM
 from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.compare_insert import CompareInsert
 from dbsync.comparing.unpacked_insert import UnpackedInsert
+from dbsync.keyzip import keyzip
 from dbsync.settings import Settings
 from dbsync.exceptions import DbSyncCompareException
 
@@ -44,11 +45,14 @@ class Comparison:
                       dst_inserts: List[UnpackedInsert]) \
             -> List[Tuple[IM.Insert, IM.Insert]]:
         # still dumb, but it works for maryjoya_WPKWA
-        pairs = list(zip(src_inserts, dst_inserts, strict=True))
-        for p in pairs:
-            if p[0].columns != p[1].columns:
-                msg = "Bad pair: {p[0].columns} vs {p[1].columns}"
-                raise DbSyncCompareException(msg)
+        # the zip blows up for maryjoya_WP5Z2
+        # pairs = list(zip(src_inserts, dst_inserts, strict=True))
+        # hopefully less dumb:
+        pairs = keyzip(src_inserts, dst_inserts, attrgetter("columns"))
+        # for p in pairs:
+        #     if p[0].columns != p[1].columns:
+        #         msg = "Bad pair: {p[0].columns} vs {p[1].columns}"
+        #         raise DbSyncCompareException(msg)
         return pairs
 
     def output_table(self, table: IM.Table) -> None:

@@ -133,7 +133,6 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
     @classmethod
     def obj(cls, initial_settings=None):
-        # TODO read this from a file
         global _global_config
 
         if _global_config is None:

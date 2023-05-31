@@ -81,7 +81,7 @@ class TestCompareInsert:
                 src_mod=False,
                 dst_mod=False,
                 expected_sql="""-- Inserting 1 row:
-INSERT INTO `test_table` (f1, f2, f3, f4) VALUES
+INSERT INTO `NhU_test_table` (f1, f2, f3, f4) VALUES
 (01, '2', '3', '4');"""
             ),
             # one update
@@ -91,7 +91,7 @@ INSERT INTO `test_table` (f1, f2, f3, f4) VALUES
                 src_mod=True,
                 dst_mod=False,
                 expected_sql="""-- Updating 1 record:
-UPDATE `test_table`
+UPDATE `NhU_test_table`
 SET f3='I', f4='J'
 WHERE f1=17 AND f2='i';"""
             )
