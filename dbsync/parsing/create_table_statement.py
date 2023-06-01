@@ -1,5 +1,6 @@
 """Parses create table statements"""
 
+import re
 from sqlparse import sql
 from sqlparse import tokens as T
 from enum import IntEnum
@@ -114,6 +115,22 @@ def get_columns(tl: sql.TokenList) -> List[IM.Column]:
     return cols
 
 
+def _check_for_time_cols(table: IM.Table):
+    prospects = [f"\"{c.name}\""
+                 for c in table.columns
+                 if re.search(r"(datetime|timestamp)", c.datatype)]
+
+    if len(prospects) == 0:
+        return ""
+    elif len(prospects) == 1:
+        rhs = prospects[0]
+    else:
+        rhs = f"[{', '.join(prospects)}]"
+
+    lhs = re.sub(r"^NhU_", "", table.name)
+    return f"\"{lhs}\": {rhs},"
+
+
 def create_table(ss: SqlStatement) -> IM.Table:
     t = ss.get_token()
     if isinstance(t, sql.Identifier):
@@ -124,7 +141,13 @@ def create_table(ss: SqlStatement) -> IM.Table:
         t = ss.get_token()
         if isinstance(t, sql.Parenthesis):
             cols = get_columns(t)
-            return IM.Table(name, cols)
+            table = IM.Table(name, cols)
+
+            time_cols = _check_for_time_cols(table)
+            if len(time_cols) > 0:
+                print(time_cols)
+
+            return table
         # what about the stuff after the column defs?
         # e.g., ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         # COLLATE=utf8mb4_unicode_520_ci;
