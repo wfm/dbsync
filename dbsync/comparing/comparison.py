@@ -49,10 +49,6 @@ class Comparison:
         # pairs = list(zip(src_inserts, dst_inserts, strict=True))
         # hopefully less dumb:
         pairs = keyzip(src_inserts, dst_inserts, attrgetter("columns"))
-        # for p in pairs:
-        #     if p[0].columns != p[1].columns:
-        #         msg = "Bad pair: {p[0].columns} vs {p[1].columns}"
-        #         raise DbSyncCompareException(msg)
         return pairs
 
     def output_table(self, table: IM.Table) -> None:
@@ -64,19 +60,15 @@ class Comparison:
         dst_prefix = Settings.obj().dst_prefix
         if re.search(f"^{dst_prefix}", table.name):
             # this is not a src table
-            print(f"Table {table.name} is a dst table")
             return
 
-        print(f"Table {table.name} is a src table")
         src_inserts = self.repo.get_inserts(table.name)
-        print(f"  It has {len(src_inserts)} insert statements")
         dst_name = dst_prefix + table.name
         dst = self.repo.get_table(dst_name)
         dst_inserts = self.repo.get_inserts(dst_name)
         pairs = self._pair_inserts(src_inserts, dst_inserts)
         for p in pairs:
             diffs = CompareInsert.compare(p[0], p[1], dst)
-            print(f"{table.name} : {len(diffs.additions)} inserts, {len(diffs.updates)} updates")
             sql = diffs.generate_sql()
             self._write(f"-- Prod table {table.name}")
             if dst is not None:
@@ -94,7 +86,6 @@ class Comparison:
             self._write(text)
 
     def compare(self):
-        print(self.repo)
         for statement in self.repo:
             if isinstance(statement, IM.Table):
                 self.output_table(statement)

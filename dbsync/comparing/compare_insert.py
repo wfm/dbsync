@@ -1,11 +1,11 @@
 """Compares data between the prod and staging databases"""
 
+import re
 from dataclasses import dataclass
 from typing import List, Dict
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert, InsertRecord
-from dbsync.exceptions import DbSyncCompareException
 
 
 @dataclass
@@ -123,12 +123,12 @@ class CompareInsert:
                 # if src key < dst key, insert this record into dst
                 add.append(src_item.insert_vals)
                 src_item = srcgen.get_next_item()
+            elif src_item.key > dst_item.key:
+                # skip over dst records until we "catch up"
+                dst_item = dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
                 src_item = srcgen.get_next_item()
-                dst_item = dstgen.get_next_item()
-            elif src_item.key > dst_item.key:
-                # skip over dst records until we "catch up"
                 dst_item = dstgen.get_next_item()
             else:
                 # the key are the same but the data is different
@@ -136,11 +136,58 @@ class CompareInsert:
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything
                 # TODO just update the columns that are different
-                # TODO use a timestamp column to decide whether or not to update
+                # TODO use a time column to decide whether or not to update
+                _ = cls._get_time_info(src_item, dst_item, dst_table)
                 # TODO use separate InsertRecord and UpdateRecord?
-                update.append(InsertRecord(src_item.key, None, src_item.key_vals, src_item.update_vals))
+                update.append(
+                    InsertRecord(
+                        src_item.key,
+                        None,
+                        src_item.key_vals,
+                        src_item.update_vals))
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
 
         return InsertDiffs(dst_table, add, update)
+
+    _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
+
+    @classmethod
+    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table):
+        msg = f"Updating table {table.name} - "
+        do_update = False
+        if table.timestamp_columns is None or \
+                len(table.timestamp_columns) == 0:
+            # not certain whether to update or not to update
+            msg += "no time info available"
+        else:
+            # slick, but the columns are in the order they occur in
+            # the insert statement, which may not be the same as
+            # the order of the timestamp_cols list
+            # besides, i think we want lists not dicts
+            # src_times = {k: v for k, v in src_item.insert_vals.items() if k in table.timestamp_columns}
+            # dst_times = {k: v for k, v in dst_item.insert_vals.items() if k in table.timestamp_columns}
+            src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
+            dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
+            msg += f"src times: {src_times}, dst times: {dst_times}"
+            try:
+                src = next(filter(CompareInsert._time_regex.match, src_times))
+                dst = next(filter(CompareInsert._time_regex.match, dst_times))
+                do_update = src > dst  # TODO is it ok to compare strings here?
+            except StopIteration:
+                pass
+
+        msg += f", result: {do_update}"
+        if do_update:
+            print(msg)
+        return do_update
+
+    @classmethod
+    def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):
+        result = []
+        for col in cols:
+            if col in vals:
+                result.append(vals[col])
+
+        return result

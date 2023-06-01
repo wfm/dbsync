@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from dbsync.exceptions import DbSyncCompareException
+from dbsync.settings import Settings
 
 
 class Quoted:
@@ -58,6 +59,11 @@ class Table(Intermediate, NameMixin):
     """Represents a table definition"""
     columns: List[Column]
     primary_keys: List[str] = field(default_factory=list)
+    timestamp_columns: List[str] = field(default_factory=list)
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.timestamp_columns = Settings.obj().get_timestamp_cols(self.name)
 
     @property
     def count(self):

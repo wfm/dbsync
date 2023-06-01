@@ -34,7 +34,6 @@ class UnpackedInsert:
 
         self.nonkeys = [x for x in self.columns if x not in self.primary_keys]
         if len(self.nonkeys) == 0:
-            print(f"Table {self.name} has no non-primary key columns")
             self._nonkey_getter = None
         else:
             self._nonkey_getter = itemgetter(*self.nonkeys)

@@ -1,7 +1,7 @@
 """Configuration-related stuffs"""
 
 import re
-from typing import List
+from typing import Dict, List
 from pydantic import BaseModel, PrivateAttr
 
 from dbsync.exceptions import DbSyncParseException
@@ -95,6 +95,42 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     ]
     excluded_tables: List[str] = []
 
+    timestamp_cols: Dict[str, List[str]] = {
+        "actionscheduler_actions": ["scheduled_date_gmt"],
+        "actionscheduler_claims": ["date_created_gmt"],
+        "actionscheduler_logs": ["log_date_gmt"],
+        "ce4wp_abandoned_checkout": [
+            "checkout_recovered", "checkout_updated", "checkout_created"],
+        "comments": ["comment_date_gmt"],
+        "e_events": ["created_at"],
+        "links": ["link_updated"],
+        "lockdowns": ["release_date", "lockdown_date"],
+        "login_fails": ["login_attempt_date"],
+        "nfd_data_event_queue": ["created_at"],
+        "posts": ["post_modified_gmt", "post_date_gmt"],
+        "sib_model_users": ["user_added_date"],
+        "tec_events": ["updated_at"],
+        "tec_occurrences": ["updated_at"],
+        "users": ["user_registered"],
+        "wc_admin_notes": ["date_created"],
+        "wc_customer_lookup": ["date_last_active", "date_registered"],
+        "wc_download_log": ["timestamp"],
+        "wc_order_coupon_lookup": ["date_created"],
+        "wc_order_product_lookup": ["date_created"],
+        "wc_order_stats": ["date_completed", "date_paid", "date_created"],
+        "wc_order_tax_lookup": ["date_created"],
+        "wc_reserved_stock": ["timestamp"],
+        "wc_webhooks": ["date_modified_gmt", "date_created_gmt"],
+        "woocommerce_downloadable_product_permissions": ["access_granted"],
+        "woocommerce_log": ["timestamp"],
+        "wpforms_logs": ["create_at"],
+        "wpforms_tasks_meta": ["date"],
+        "wpmailsmtp_debug_events": ["created_at"],
+        "wpmailsmtp_tasks_meta": ["date"],
+        "yoast_indexable": ["updated_at", "created_at"],
+        "yoast_primary_term": ["updated_at", "created_at"]
+    }
+
     # filename for generated sql, or None for stdout
     output_file: str | None = "output.sql"
 
@@ -130,6 +166,17 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             base_name in self.included_tables
         exclude = base_name in self.excluded_tables
         return include and not exclude
+
+    def get_timestamp_cols(self, table_name):
+        """
+        Returns the timestamp columns in a table, in the order
+        in which they should be evaluated. Returns an empty
+        list if there are no timestamp columns in the table.
+        """
+        base_name = self.get_base_table_name(table_name)
+        if base_name in self.timestamp_cols:
+            return self.timestamp_cols[base_name]
+        return []
 
     @classmethod
     def obj(cls, initial_settings=None):
