@@ -43,16 +43,28 @@ class Column(NameMixin):
     auto_inc_val: int = field(default_factory=int)
 
     # TODO we added the auto_increment stuff to the modifiers field
-    def generate_sql(self) -> str:
+    def _get_modifier_str(self):
         m = re.search(r"^(.+?) AUTO_INCREMENT", self.modifiers)
         if m:
             modstr = m.group(1)
         else:
             modstr = self.modifiers
+        return modstr
 
-        sql = f"  `{self.name}` {self.datatype} {modstr},"
+    def _get_sql_str(self, terminator: str, modstr: str) -> str:
+        sql = f"  `{self.name}` {self.datatype} {modstr}{terminator}"
         return sql
 
+    def generate_sql(self, terminator: str=",") -> str:
+        modstr = self._get_modifier_str()
+        return self._get_sql_str(terminator, modstr)
+    
+    def generate_autoinc_sql(self, terminator: str=",", autoinc_val: int | None=None) -> str:
+        if autoinc_val is not None:
+            self.auto_inc_val = autoinc_val
+        modstr = self._get_modifier_str()
+        modstr += f" AUTO_INCREMENT, AUTO_INCREMENT={self.auto_inc_val}"
+        return self._get_sql_str(terminator, modstr)
 
 @dataclass
 class Table(Intermediate, NameMixin):
@@ -78,14 +90,17 @@ class Table(Intermediate, NameMixin):
             raise DbSyncCompareException(msg)
         return col[0]
 
-    def generate_sql(self, alt_name=None):
-        sql = []
+    def _start_sql(self, keyword, alt_name=None):
         if alt_name is None:
             table_name = self.name
         else:
             table_name = alt_name
 
-        sql.append(f"CREATE TABLE `{table_name}` (")
+        return f"{keyword} TABLE `{table_name}`"
+
+    def generate_sql(self, alt_name=None):
+        sql = []
+        sql.append(self._start_sql("CREATE", alt_name) +  " (")
         for col in self.columns:
             sql.append(col.generate_sql())
         # get rid of final comma
@@ -93,6 +108,39 @@ class Table(Intermediate, NameMixin):
         # TODO should get all this crap from the prod table definition
         sql.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 \
                    COLLATE=utf8mb4_unicode_520_ci;")
+        return "\n".join(sql)
+
+    def _get_autoinc_column(self) -> Column | None:
+        autoinc_cols = [c for c in self.columns if c.auto_inc]
+        if len(autoinc_cols) == 0:
+            return None
+        elif len(autoinc_cols) == 1:
+            return autoinc_cols[0]
+        else:
+            raise DbSyncCompareException("Multiple autoinc columns found")
+
+    def get_autoinc_val(self) -> int:
+        autoinc_col = self._get_autoinc_column()
+        if autoinc_col is not None:
+            return autoinc_col.auto_inc_val
+        return -1
+
+    def disable_autoinc(self, alt_name: str = None) -> str:
+        sql = []
+        autoinc_col = self._get_autoinc_column()
+        if autoinc_col is not None:
+            sql.append("-- Disable auto-increment")
+            sql.append(self._start_sql("ALTER", alt_name))
+            sql.append("  MODIFY " + autoinc_col.generate_sql(";"))
+        return "\n".join(sql)
+
+    def enable_autoinc(self, alt_name: str = None, autoinc_val: int | None=None) -> str:
+        sql = []
+        autoinc_col = self._get_autoinc_column()
+        if autoinc_col is not None:
+            sql.append("-- Enable auto-increment")
+            sql.append(self._start_sql("ALTER", alt_name))
+            sql.append("  MODIFY " + autoinc_col.generate_autoinc_sql(";", autoinc_val))
         return "\n".join(sql)
 
 

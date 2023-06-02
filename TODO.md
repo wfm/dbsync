@@ -1,10 +1,7 @@
 # TODO
-* Done: Look at "this is too dumb" in comparison.py
+- what about tables that don't have a timestamp column?
+* Check autoincrement
 * If there are more than N diffs, truncate the dst table and reload?
-* Done, test: use a timestamp column to decide whether or not to update
-* Only output required columns for update statements
-* Break up inserts into groups (of 50? 100?)
-* (it'll come to me)
 * Does it matter that we sort everything like a string when there are numeric PK columns?
 - it would be easy to parse the ints...
 * Integration tests
@@ -15,6 +12,7 @@
 * Refactoring
   - Complexity issues
   - Get rid of "parser_toy"
+  - move sql generation into separate modules
 * Use separate InsertRecord and UpdateRecord?
 * Do we need backticks on column names?
 * Linter errors
@@ -23,3 +21,10 @@
 * Implement sync between 2 databases
 * Support more flavors of insert statements
 * Support other DML statements?
+
+#DONE
+* Done: Look at "this is too dumb" in comparison.py
+* Done, test: use a timestamp column to decide whether or not to update
+* Only output required columns for update statements
+* Break up inserts into groups (of 50? 100?)
+* Disable/enable auto-increment

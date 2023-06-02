@@ -71,7 +71,7 @@ Insert statements:
         m = cls._auto_inc_re.search(col.modifiers)
         if m:
             col.auto_inc = True
-            col.auto_inc_val = m.group(1)
+            col.auto_inc_val = int(m.group(1))
         else:
             col.auto_inc = False
 

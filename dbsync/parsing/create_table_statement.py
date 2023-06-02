@@ -1,6 +1,5 @@
 """Parses create table statements"""
 
-import re
 from sqlparse import sql
 from sqlparse import tokens as T
 from enum import IntEnum

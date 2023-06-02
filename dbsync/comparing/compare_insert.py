@@ -38,11 +38,17 @@ class InsertDiffs:
         sql.append(f"-- Inserting {l} {r}:")
         dst_cols = list(self.additions[0].keys())
         col_str = ", ".join(dst_cols)
-        sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
-        for add in self.additions:
-            values = [val for val in add.values()]
-            sql.append(f"({', '.join(values)}),")
-        self._add_semicolon(sql)
+
+        idx = 0
+        while idx < len(self.additions):
+            sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
+            last = min(len(self.additions), idx + 100)
+            for add in self.additions[idx:last]:
+                values = [val for val in add.values()]
+                sql.append(f"({', '.join(values)}),")
+            self._add_semicolon(sql)
+            idx = last
+
         return sql
 
     def _generate_update(self, record: InsertRecord) -> List[str]:
@@ -85,6 +91,7 @@ class Generator:
         return item
 
 
+# TODO would this be better with instance methods?
 class CompareInsert:
     """
     Compares the values in two insert statements and generates
@@ -135,16 +142,16 @@ class CompareInsert:
                 # what should we do here? if the src record is newer,
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything
-                # TODO just update the columns that are different
                 # TODO use a time column to decide whether or not to update
-                _ = cls._get_time_info(src_item, dst_item, dst_table)
-                # TODO use separate InsertRecord and UpdateRecord?
-                update.append(
-                    InsertRecord(
-                        src_item.key,
-                        None,
-                        src_item.key_vals,
-                        src_item.update_vals))
+                if cls._get_time_info(src_item, dst_item, dst_table):
+                    # TODO use separate InsertRecord and UpdateRecord?
+                    update_vals = cls._update_only_necessary_cols(src_item, dst_item)
+                    update.append(
+                        InsertRecord(
+                            src_item.key,
+                            None,
+                            src_item.key_vals,
+                            update_vals))
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
@@ -160,7 +167,7 @@ class CompareInsert:
         if table.timestamp_columns is None or \
                 len(table.timestamp_columns) == 0:
             # not certain whether to update or not to update
-            msg += "no time info available"
+            msg += "*** no time info available ***"
         else:
             # slick, but the columns are in the order they occur in
             # the insert statement, which may not be the same as
@@ -174,12 +181,14 @@ class CompareInsert:
             try:
                 src = next(filter(CompareInsert._time_regex.match, src_times))
                 dst = next(filter(CompareInsert._time_regex.match, dst_times))
+
                 do_update = src > dst  # TODO is it ok to compare strings here?
             except StopIteration:
+                msg += ", *** StopIteration ***"
                 pass
 
         msg += f", result: {do_update}"
-        if do_update:
+        if not do_update:
             print(msg)
         return do_update
 
@@ -190,4 +199,13 @@ class CompareInsert:
             if col in vals:
                 result.append(vals[col])
 
+        return result
+
+    @classmethod
+    def _update_only_necessary_cols(cls, src_item: InsertRecord, dst_item: InsertRecord) -> Dict[str, str]:
+        result: Dict[str, str] = {}
+        for col, src_val in src_item.update_vals.items():
+            dst_val = dst_item.update_vals[col]
+            if src_val != dst_val:
+                result[col] = src_val
         return result

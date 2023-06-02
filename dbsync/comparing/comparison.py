@@ -12,7 +12,6 @@ from dbsync.comparing.compare_insert import CompareInsert
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.keyzip import keyzip
 from dbsync.settings import Settings
-from dbsync.exceptions import DbSyncCompareException
 
 
 class Comparison:
@@ -76,9 +75,10 @@ class Comparison:
             else:
                 self._write("-- No staging table found")
 
-            self._write("-- TODO disable auto_increment")
+            self._write(dst.disable_autoinc())
             self._write(sql)
-            self._write("-- TODO enable auto_increment")
+            new_autoinc = max(table.get_autoinc_val(), dst.get_autoinc_val())
+            self._write(dst.enable_autoinc(autoinc_val=new_autoinc))
 
     def output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

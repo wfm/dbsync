@@ -6,3 +6,4 @@
 # multiple insert statements in different orders
 # inserts with rows in different order
 # creating a table
+# updates with timestamps
