@@ -2,11 +2,12 @@ import unittest
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
+from tests.fixtures import *
 
 
 class TestUnpackedInsert(unittest.TestCase):
     def test_dedup_normal_case(self):
-        name = "test_table"
+        name = TABLE_NAME
         cols = ["a", "b", "c"]
         table = IM.Table(name, [], ["a", "b"])
 
@@ -37,7 +38,7 @@ class TestUnpackedInsert(unittest.TestCase):
         self.assertListEqual(nodups.values, v3, "Unpacked without duplicates")
 
     def test_generator(self):
-        name = "test_table"
+        name = TABLE_NAME
         cols = ["f1", "f2", "f3", "f4"]
         pk = ["f1", "f2"]
         table = IM.Table(name, [], pk)

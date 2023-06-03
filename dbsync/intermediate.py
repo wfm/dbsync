@@ -42,6 +42,11 @@ class Column(NameMixin):
     auto_inc: bool = field(default_factory=bool)
     auto_inc_val: int = field(default_factory=int)
 
+    def __post_init__(self):
+        super().__post_init__()
+        self.datatype = self.datatype.strip()
+        self.modifiers = self.modifiers.strip()
+
     # TODO we added the auto_increment stuff to the modifiers field
     def _get_modifier_str(self):
         m = re.search(r"^(.+?) AUTO_INCREMENT", self.modifiers)

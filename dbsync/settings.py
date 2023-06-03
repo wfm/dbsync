@@ -1,7 +1,7 @@
 """Configuration-related stuffs"""
 
 import re
-from typing import Dict, List
+from typing import Dict, List, Any
 from pydantic import BaseModel, PrivateAttr
 
 from dbsync.exceptions import DbSyncParseException
@@ -131,8 +131,16 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "yoast_primary_term": ["updated_at", "created_at"]
     }
 
+    # Controls what happens when data for a pair of
+    # tables differ, but the tables don't have
+    # a timestamp column
+    update_tables_without_timestamp: bool = False
+
     # filename for generated sql, or None for stdout
     output_file: str | None = "output.sql"
+    # if not None, generated sql is written here instead
+    # of filename above. Shoud be of type TextIOWrapper
+    file_descriptor: Any | None = None
 
     _table_name_regex: re = PrivateAttr()
 

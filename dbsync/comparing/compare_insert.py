@@ -6,6 +6,7 @@ from typing import List, Dict
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert, InsertRecord
+from dbsync.settings import Settings
 
 
 @dataclass
@@ -29,20 +30,20 @@ class InsertDiffs:
 
     # TODO do we need backticks on the column names?
     def _generate_insert(self) -> List[str]:
-        if (len(self.additions) == 0):
+        add_len = len(self.additions)
+        if (add_len == 0):
             return []
 
         sql = []
-        l = len(self.additions)
-        r = self._pluralize(l, "row")
-        sql.append(f"-- Inserting {l} {r}:")
-        dst_cols = list(self.additions[0].keys())
+        r = self._pluralize(add_len, "row")
+        sql.append(f"-- Inserting {add_len} {r}:")
+        dst_cols = [f"`{col}`" for col in list(self.additions[0].keys())]
         col_str = ", ".join(dst_cols)
 
         idx = 0
-        while idx < len(self.additions):
+        while idx < add_len:
             sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
-            last = min(len(self.additions), idx + 100)
+            last = min(add_len, idx + 100)
             for add in self.additions[idx:last]:
                 values = [val for val in add.values()]
                 sql.append(f"({', '.join(values)}),")
@@ -54,19 +55,19 @@ class InsertDiffs:
     def _generate_update(self, record: InsertRecord) -> List[str]:
         sql = []
         sql.append(f"UPDATE `{self.dst_table.name}`")
-        assignments = [f"{col}={val}" for col, val in record.update_vals.items()]
+        assignments = [f"`{col}`={val}" for col, val in record.update_vals.items()]
         sql.append(f"SET {', '.join(assignments)}")
-        conditions = [f"{col}={val}" for col, val in record.key_vals.items()]
+        conditions = [f"`{col}`={val}" for col, val in record.key_vals.items()]
         sql.append(f"WHERE {' AND '.join(conditions)};")
         return sql
 
     def generate_sql(self):
         sql = self._generate_insert()
 
-        l = len(self.updates)
-        if (l > 0):
-            r = self._pluralize(l, "record")
-            sql.append(f"-- Updating {l} {r}:")
+        upd_len = len(self.updates)
+        if (upd_len > 0):
+            r = self._pluralize(upd_len, "record")
+            sql.append(f"-- Updating {upd_len} {r}:")
             for upd in self.updates:
                 sql += self._generate_update(upd)
 
@@ -142,7 +143,6 @@ class CompareInsert:
                 # what should we do here? if the src record is newer,
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything
-                # TODO use a time column to decide whether or not to update
                 if cls._get_time_info(src_item, dst_item, dst_table):
                     # TODO use separate InsertRecord and UpdateRecord?
                     update_vals = cls._update_only_necessary_cols(src_item, dst_item)
@@ -168,13 +168,8 @@ class CompareInsert:
                 len(table.timestamp_columns) == 0:
             # not certain whether to update or not to update
             msg += "*** no time info available ***"
+            do_update = Settings.obj().update_tables_without_timestamp
         else:
-            # slick, but the columns are in the order they occur in
-            # the insert statement, which may not be the same as
-            # the order of the timestamp_cols list
-            # besides, i think we want lists not dicts
-            # src_times = {k: v for k, v in src_item.insert_vals.items() if k in table.timestamp_columns}
-            # dst_times = {k: v for k, v in dst_item.insert_vals.items() if k in table.timestamp_columns}
             src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
             dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
             msg += f"src times: {src_times}, dst times: {dst_times}"
@@ -202,7 +197,9 @@ class CompareInsert:
         return result
 
     @classmethod
-    def _update_only_necessary_cols(cls, src_item: InsertRecord, dst_item: InsertRecord) -> Dict[str, str]:
+    def _update_only_necessary_cols(cls,
+                                    src_item: InsertRecord,
+                                    dst_item: InsertRecord) -> Dict[str, str]:
         result: Dict[str, str] = {}
         for col, src_val in src_item.update_vals.items():
             dst_val = dst_item.update_vals[col]

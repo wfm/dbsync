@@ -52,6 +52,12 @@ def get_args():
 
 def main():
     filename = get_args()
+    do_comparison(filename)
+    return 0
+
+
+def do_comparison(filename: str) -> None:
+    print("Table prefix:", Settings.obj().tbl_prefix)
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
@@ -60,7 +66,7 @@ def main():
     time2 = time.time()
     repo.post_process()
     time3 = time.time()
-    c = Comparison(repo, Settings.obj().output_file)
+    c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
     c.compare()
     time4 = time.time()
 
@@ -70,5 +76,3 @@ def main():
     print("  Post-Processing     : %.2f" % (time3-time2))
     print("  Compare and output  : %.2f" % (time4-time3))
     print("  Total               : %.2f" % (time4-time0))
-
-    return 0

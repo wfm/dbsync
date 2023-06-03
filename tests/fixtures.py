@@ -7,6 +7,13 @@ from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.settings import Settings
 
+
+settings = Settings()
+settings.update_tables_without_timestamp = True
+Settings.obj(settings)
+print(f"update_tables_without_timestamp: {Settings.obj().update_tables_without_timestamp}")
+
+
 TABLE_NAME = Settings.obj().tbl_prefix + "test_table"
 COLUMN_NAMES = ["f1", "f2", "f3", "f4"]
 PK_COLUMNS = ["f1", "f2"]

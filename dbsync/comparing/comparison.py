@@ -43,9 +43,6 @@ class Comparison:
                       src_inserts: List[UnpackedInsert],
                       dst_inserts: List[UnpackedInsert]) \
             -> List[Tuple[IM.Insert, IM.Insert]]:
-        # still dumb, but it works for maryjoya_WPKWA
-        # the zip blows up for maryjoya_WP5Z2
-        # pairs = list(zip(src_inserts, dst_inserts, strict=True))
         # hopefully less dumb:
         pairs = keyzip(src_inserts, dst_inserts, attrgetter("columns"))
         return pairs
@@ -63,22 +60,24 @@ class Comparison:
 
         src_inserts = self.repo.get_inserts(table.name)
         dst_name = dst_prefix + table.name
+        # TODO handle the case where dst doesn't exist?
         dst = self.repo.get_table(dst_name)
         dst_inserts = self.repo.get_inserts(dst_name)
         pairs = self._pair_inserts(src_inserts, dst_inserts)
         for p in pairs:
             diffs = CompareInsert.compare(p[0], p[1], dst)
-            sql = diffs.generate_sql()
-            self._write(f"-- Prod table {table.name}")
-            if dst is not None:
-                self._write(f"-- Staging table {dst_name}")
-            else:
-                self._write("-- No staging table found")
+            sql_text = diffs.generate_sql()
+            if len(sql_text) > 0:
+                self._write(f"-- Prod table {table.name}")
+                if dst is not None:
+                    self._write(f"-- Staging table {dst_name}")
+                else:
+                    self._write("-- No staging table found")
 
-            self._write(dst.disable_autoinc())
-            self._write(sql)
-            new_autoinc = max(table.get_autoinc_val(), dst.get_autoinc_val())
-            self._write(dst.enable_autoinc(autoinc_val=new_autoinc))
+                self._write(dst.disable_autoinc())
+                self._write(sql_text)
+                new_autoinc = max(table.get_autoinc_val(), dst.get_autoinc_val())
+                self._write(dst.enable_autoinc(autoinc_val=new_autoinc))
 
     def output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

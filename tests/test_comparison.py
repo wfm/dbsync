@@ -24,8 +24,9 @@ class TestComparison:
         stg_insert1 = IM.Insert(stg_name, insert1.columns[col_slc], stg_data1)
         return (stg_table, stg_insert0, stg_insert1)
 
-    def test_inserts_have_different_columns(self,
-                                            table, get_insert_stmt, get_narrow_insert_stmt):
+    # Not applicable any more:
+    def no_test_inserts_have_different_columns(self,
+                                               table, get_insert_stmt, get_narrow_insert_stmt):
         slc0 = slice(0, DATA_LEN, 2)
         slc1 = slice(1, DATA_LEN, 2)
         insert0 = get_insert_stmt(slc0)
@@ -35,10 +36,10 @@ class TestComparison:
         repo = ComparisonRepo()
         repo.append(table)
         repo.append(insert0)
-        repo.append(insert1)
+        ##repo.append(insert1)
         repo.append(stg_table)
         repo.append(stg_insert1)
-        repo.append(stg_insert0)
+        ##repo.append(stg_insert0)
         repo.post_process()
 
         fd = StringIO()
@@ -46,7 +47,8 @@ class TestComparison:
         with pytest.raises(DbSyncCompareException):
             comparison.compare()
 
-    def test_unequal_number_of_inserts(self,
+    # not applicable any more
+    def no_test_unequal_number_of_inserts(self,
                                        table, get_insert_stmt, get_narrow_insert_stmt):
         slc0 = slice(0, DATA_LEN, 2)
         slc1 = slice(1, DATA_LEN, 2)

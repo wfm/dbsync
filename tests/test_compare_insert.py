@@ -1,5 +1,6 @@
 from tests.fixtures import *
 from dbsync.comparing.compare_insert import CompareInsert
+from dbsync.settings import Settings
 
 
 # copied from https://docs.pytest.org/en/6.2.x/example/parametrize.html
@@ -81,7 +82,7 @@ class TestCompareInsert:
                 src_mod=False,
                 dst_mod=False,
                 expected_sql="""-- Inserting 1 row:
-INSERT INTO `NhU_test_table` (f1, f2, f3, f4) VALUES
+INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
 (01, '2', '3', '4');"""
             ),
             # one update
@@ -92,11 +93,12 @@ INSERT INTO `NhU_test_table` (f1, f2, f3, f4) VALUES
                 dst_mod=False,
                 expected_sql="""-- Updating 1 record:
 UPDATE `NhU_test_table`
-SET f3='I', f4='J'
-WHERE f1=17 AND f2='i';"""
+SET `f3`='I', `f4`='J'
+WHERE `f1`=17 AND `f2`='i';"""
             )
         ]
     }
+
 
     def _pack(self, packed):
         return [list(d.values()) for d in packed]

@@ -52,14 +52,6 @@ class UnpackedInsert:
     def by_columns(cls, item):
         return itemgetter(item.columns)
 
-    # @classmethod
-    # def by_columns_and_pk(cls, item):
-    #     pk = item._get_min_pk()
-    #     return itemgetter((item.columns, pk))
-
-    # def _get_min_pk(self):
-
-
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
         return [list(d.values()) for d in values]
