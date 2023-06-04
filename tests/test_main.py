@@ -25,13 +25,20 @@ class TestMain:
     def test_runner(self):
         files = self._get_test_files()
         for pair in files:
-            self.fd.truncate()
+            self._pretest_setup()
             do_comparison(pair[0])
             self._test_output(pair[1])
+
+    # TODO can we get this from a file?
+    timestamp_cols = {
+        "test1": ["date_created_gmt"]
+    }
 
     def setup_method(self, test_method):
         # further proof that singletons are a bad idea:
         self.saved_settings = Settings.obj().copy()
+
+    def _pretest_setup(self):
         self.fd = StringIO()
         # this is kludgy:
         settings = Settings.obj()
@@ -39,6 +46,7 @@ class TestMain:
         settings.tbl_prefix = TBL_PREFIX
         settings.output_file = None
         settings.file_descriptor = self.fd
+        settings.timestamp_cols = TestMain.timestamp_cols
         settings.init()
 
     def teardown_method(self, test_method):
@@ -47,19 +55,22 @@ class TestMain:
         settings.tbl_prefix = self.saved_settings.tbl_prefix
         settings.output_file = self.saved_settings.output_file
         settings.file_descriptor = self.saved_settings.file_descriptor
+        settings.timestamp_cols = self.saved_settings.timestamp_cols
         settings.init()
 
     def _get_test_files(self):
         path = Path(DIRECTORY)
         files = [f for f in path.iterdir() if f.is_file()]
+        files.sort(key=lambda f: f.name)
         inf = [f for f in files if f.name.endswith("-input.sql")]
         outf = [f for f in files if f.name.endswith("-expected-output.sql")]
+        assert len(inf) == len(outf)
+
         for idx in range(0, len(inf)):
             prefix = f"test{idx}"
-            if not inf[idx].name.startswith(prefix) or \
-               not outf[idx].name.startswith(prefix):
-                print(f"Missing a test file, index {idx}")
-                exit(1)
+            assert inf[idx].name.startswith(prefix)
+            assert outf[idx].name.startswith(prefix)
+
         in_names = [str(f) for f in inf]
         return list(zip(in_names, outf))
 
@@ -74,7 +85,7 @@ class TestMain:
         errs = [line for line in c if not line.startswith(" ")]
         if len(errs) > 0:
             print("\n".join(list(errs)))
-            assert False, f"^^^^^ Test with {expected_file.name} failed"
+            assert False, f"Test with {expected_file.name} failed"
 
     def _cleanup_output(self, text: str) -> List[str]:
         # split into lines and remove comments

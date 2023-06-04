@@ -177,10 +177,9 @@ class CompareInsert:
                 src = next(filter(CompareInsert._time_regex.match, src_times))
                 dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
-                do_update = src > dst  # TODO is it ok to compare strings here?
+                do_update = src >= dst  # TODO is it ok to compare strings here?
             except StopIteration:
                 msg += ", *** StopIteration ***"
-                pass
 
         msg += f", result: {do_update}"
         if not do_update:

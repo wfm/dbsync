@@ -19,7 +19,7 @@ def get_args():
     argparser = argparse.ArgumentParser(
         prog="dbsync",
         description="Generates SQL to sync prod DB to staging DB",
-        epilog="So long, and thanks for playing"
+        epilog="So long, and thanks for all the fish!"
     )
 
     argparser.add_argument(
@@ -34,30 +34,51 @@ def get_args():
         help="The Wordpress table prefix",
         default=settings.tbl_prefix)
     argparser.add_argument(
+        "--timestamp",
+        help="Info to add to timestamp columns, e.g. tbl=col1,col2;tbl2=col3",
+        default="")
+    argparser.add_argument(
         "-o", "--output",
         help="The filename for the SQL output",
         default=settings.output_file)
+    argparser.add_argument(
+        "-q", "--quiet",
+        help="Suppresses output to stdout",
+        default=False,
+        action="store_true")
 
     args = argparser.parse_args()
+
+    if len(args.timestamp) > 0:
+        pairs = [x.split("=") for x in args.timestamp.replace(" ", "").split(";")]
+        for p in pairs:
+            p[1] = p[1].split(",")
+        d = dict(pairs)
+        print("Timestamp cols:", d)
+        settings.timestamp_cols.update(d)
+
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.output_file = args.output
     Settings.obj(settings)
-    print("dbsync from   :", args.filename)
-    print("  database    :", args.database)
-    print("  table prefix:", args.table_prefix)
-    print("  output file :", args.output)
-    return args.filename
+    if not args.quiet:
+        print("dbsync from   :", args.filename)
+        print("  database    :", args.database)
+        print("  table prefix:", args.table_prefix)
+        print("  output file :", args.output)
+    return (args.filename, args.quiet)
 
 
 def main():
-    filename = get_args()
-    do_comparison(filename)
+    filename, quiet = get_args()
+    do_comparison(filename, quiet)
     return 0
 
 
-def do_comparison(filename: str) -> None:
-    print("Table prefix:", Settings.obj().tbl_prefix)
+def do_comparison(filename: str, quiet=True) -> None:
+    if not quiet:
+        print("Table prefix:", Settings.obj().tbl_prefix)
+
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
@@ -70,9 +91,10 @@ def do_comparison(filename: str) -> None:
     c.compare()
     time4 = time.time()
 
-    print("Timing:")
-    print("  Read and split file : %.2f" % (time1-time0))
-    print("  Process statements  : %.2f" % (time2-time1))
-    print("  Post-Processing     : %.2f" % (time3-time2))
-    print("  Compare and output  : %.2f" % (time4-time3))
-    print("  Total               : %.2f" % (time4-time0))
+    if not quiet:
+        print("Timing:")
+        print("  Read and split file : %.2f" % (time1 - time0))
+        print("  Process statements  : %.2f" % (time2 - time1))
+        print("  Post-Processing     : %.2f" % (time3 - time2))
+        print("  Compare and output  : %.2f" % (time4 - time3))
+        print("  Total               : %.2f" % (time4 - time0))
