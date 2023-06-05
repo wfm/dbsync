@@ -80,15 +80,17 @@ class TestMain:
         self.fd.close()
         expected_clean = self._cleanup_output(expected)
         actual_clean = self._cleanup_output(actual)
-        d = Differ(charjunk=" ")
+        # TODO this was charjunk=" ", but that made the enumeration of c blow up
+        d = Differ(charjunk=None)
         c = d.compare(actual_clean, expected_clean)
         errs = [line for line in c if not line.startswith(" ")]
         if len(errs) > 0:
             print("\n".join(list(errs)))
-            assert False, f"Test with {expected_file.name} failed"
+            raise AssertionError(f"Test with {expected_file.name} failed")
 
     def _cleanup_output(self, text: str) -> List[str]:
         # split into lines and remove comments
+        # TODO do we need to remove /* ... */ style comments?
         lines = text.splitlines()
         filtered = [line for line in lines if not line.startswith("--")]
         return filtered

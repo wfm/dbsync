@@ -5,7 +5,7 @@ from dbsync.exceptions import DbSyncParseException
 from dbsync import constants as C
 from dbsync import intermediate as IM
 from dbsync.parsing.sql_statement import SqlStatement
-from dbsync.parsing.create_table_statement import get_columns
+from dbsync.parsing.create_table_statement import get_columns, get_pk_columns
 from dbsync.parsing.utilities import match_tokens
 from dbsync.settings import Settings
 
@@ -35,18 +35,18 @@ class AlterStatement:
         # it seems to work, so i don't want to touch it, but i think
         # that inserting the lparen would shift the last token
         # right by one:
-        last_ix = len(rest.tokens)-1
+        last_ix = len(rest.tokens) - 1
         rest.insert_before(first_ix, C.LPAREN_TOKEN)
         if match_tokens(rest.tokens[last_ix], C.SEMICOLON_TOKEN):
             rest.insert_before(last_ix, C.RPAREN_TOKEN)
         else:
             rest.insert_after(last_ix, C.RPAREN_TOKEN)
 
-        cols = get_columns(rest)
+        print(f"Tokens: {[repr(r) for r in rest]}")
+        cols, _ = get_columns(rest)
         return IM.Modification(name, cols)
 
     def _parse_add_pk(self, name: str, ss: SqlStatement) -> IM.PrimaryKey:
-        pk_columns = []
         state = State.ADD
         while state != State.PK_SUCCESS:
             t = ss.get_token()
@@ -59,15 +59,7 @@ class AlterStatement:
                 state = State.ADD
 
         if state == State.PK_SUCCESS:
-            t = ss.get_token()
-            if (isinstance(t, sql.Parenthesis)):
-                iss = SqlStatement(None, t)
-                iss.eat_token(C.LPAREN_TOKEN)
-                it = iss.get_token()
-                while it is not None and not match_tokens(it, C.RPAREN_TOKEN):
-                    pk_columns += it.value.split(",")
-                    it = iss.get_token()
-                return IM.PrimaryKey(name, pk_columns)
+            return get_pk_columns(name, ss)
 
         raise DbSyncParseException("Invalid ALTER statment")
 

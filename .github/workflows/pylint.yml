@@ -20,6 +20,4 @@ jobs:
         pip install pylint
     - name: Analysing the code with pylint
       run: |
-        source ./venv/bin/activate
-        echo "VIRTUAL_ENV: " $VIRTUAL_ENV
         pylint $(git ls-files '*.py')

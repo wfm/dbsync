@@ -8,6 +8,7 @@ LPAREN_TOKEN = sql.Token(T.Punctuation, "(")
 RPAREN_TOKEN = sql.Token(T.Punctuation, ")")
 COMMA_TOKEN = sql.Token(T.Punctuation, ",")
 SEMICOLON_TOKEN = sql.Token(T.Punctuation, ";")
+EQUALS_TOKEN = sql.Token(T.Comparison, "=")
 
 VALUES_TOKEN = sql.Token(T.Keyword, "VALUES")
 TABLE_TOKEN = sql.Token(T.Keyword, "TABLE")

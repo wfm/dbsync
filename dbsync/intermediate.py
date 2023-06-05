@@ -57,19 +57,20 @@ class Column(NameMixin):
         return modstr
 
     def _get_sql_str(self, terminator: str, modstr: str) -> str:
-        sql = f"  `{self.name}` {self.datatype} {modstr}{terminator}"
+        sql = f" `{self.name}` {self.datatype} {modstr}{terminator}"
         return sql
 
-    def generate_sql(self, terminator: str=",") -> str:
+    def generate_sql(self, terminator: str = ",") -> str:
         modstr = self._get_modifier_str()
         return self._get_sql_str(terminator, modstr)
-    
-    def generate_autoinc_sql(self, terminator: str=",", autoinc_val: int | None=None) -> str:
+
+    def generate_autoinc_sql(self, terminator: str = ",", autoinc_val: int | None = None) -> str:
         if autoinc_val is not None:
             self.auto_inc_val = autoinc_val
         modstr = self._get_modifier_str()
         modstr += f" AUTO_INCREMENT, AUTO_INCREMENT={self.auto_inc_val}"
         return self._get_sql_str(terminator, modstr)
+
 
 @dataclass
 class Table(Intermediate, NameMixin):
@@ -77,17 +78,18 @@ class Table(Intermediate, NameMixin):
     columns: List[Column]
     primary_keys: List[str] = field(default_factory=list)
     timestamp_columns: List[str] = field(default_factory=list)
+    post_definition_modifiers: str = field(default="")
 
     def __post_init__(self):
         super().__post_init__()
         self.timestamp_columns = Settings.obj().get_timestamp_cols(self.name)
 
     @property
-    def count(self):
+    def count(self) -> int:
         """Returns the number of columns in the table"""
         return len(self.columns)
 
-    def get_column(self, name):
+    def get_column(self, name: str) -> Column:
         """Gets a column by name"""
         col = [c for c in self.columns if c.name == name]
         if len(col) == 0:
@@ -95,7 +97,7 @@ class Table(Intermediate, NameMixin):
             raise DbSyncCompareException(msg)
         return col[0]
 
-    def _start_sql(self, keyword, alt_name=None):
+    def _start_sql(self, keyword: str, alt_name: str = None) -> str:
         if alt_name is None:
             table_name = self.name
         else:
@@ -103,9 +105,9 @@ class Table(Intermediate, NameMixin):
 
         return f"{keyword} TABLE `{table_name}`"
 
-    def generate_sql(self, alt_name=None):
+    def generate_sql(self, alt_name: str = None) -> str:
         sql = []
-        sql.append(self._start_sql("CREATE", alt_name) +  " (")
+        sql.append(self._start_sql("CREATE", alt_name) + " (")
         for col in self.columns:
             sql.append(col.generate_sql())
         # get rid of final comma
@@ -130,22 +132,27 @@ class Table(Intermediate, NameMixin):
             return autoinc_col.auto_inc_val
         return -1
 
+    def update_autoinc_val(self, newval: int) -> None:
+        autoinc_col = self._get_autoinc_column()
+        if autoinc_col is not None:
+            autoinc_col.auto_inc_val = newval
+
     def disable_autoinc(self, alt_name: str = None) -> str:
         sql = []
         autoinc_col = self._get_autoinc_column()
         if autoinc_col is not None:
             sql.append("-- Disable auto-increment")
             sql.append(self._start_sql("ALTER", alt_name))
-            sql.append("  MODIFY " + autoinc_col.generate_sql(";"))
+            sql.append("  MODIFY" + autoinc_col.generate_sql(";"))
         return "\n".join(sql)
 
-    def enable_autoinc(self, alt_name: str = None, autoinc_val: int | None=None) -> str:
+    def enable_autoinc(self, alt_name: str = None, autoinc_val: int | None = None) -> str:
         sql = []
         autoinc_col = self._get_autoinc_column()
         if autoinc_col is not None:
             sql.append("-- Enable auto-increment")
             sql.append(self._start_sql("ALTER", alt_name))
-            sql.append("  MODIFY " + autoinc_col.generate_autoinc_sql(";", autoinc_val))
+            sql.append("  MODIFY" + autoinc_col.generate_autoinc_sql(";", autoinc_val))
         return "\n".join(sql)
 
 
@@ -161,9 +168,9 @@ class Set(Intermediate):
     """Represents a set statement"""
     value: str
 
-    def generate_sql(self):
-        # value is SET X = Y
-        return f"SET {self.value}"
+    def generate_sql(self) -> str:
+        # The value is "X = Y"
+        return f"SET {self.value};"
 
 
 @dataclass
@@ -175,7 +182,7 @@ class Use(Intermediate):
     def __post_init__(self):
         self.value = Quoted.fix_name(self.value)
 
-    def generate_sql(self):
+    def generate_sql(self) -> str:
         """Returns a USE and START TRANSACTION"""
         if not self.is_target:
             return ""

@@ -24,11 +24,14 @@ def use_statement(ss: SqlStatement) -> IM.Use:
     return IM.Use(t.value)
 
 
-
-def process_statements(text_l: List[str], target_database: str) -> ComparisonRepo:
+def process_statements(
+        text_l: List[str],
+        target_database: str,
+        repo: ComparisonRepo = None) -> ComparisonRepo:
     in_target = False
     before_use = True
-    repo = ComparisonRepo()
+    if repo is None:
+        repo = ComparisonRepo()
 
     def add_parsed(f):
         if in_target:
@@ -66,9 +69,13 @@ def process_statements(text_l: List[str], target_database: str) -> ComparisonRep
                 print("-- db:", us.value, "in_target:", us.is_target)
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
-            elif t.match(T.DML, "COMMIT"):
+            elif t.match(T.DML, "COMMIT") or \
+                    t.match(T.DDL, "DROP") or \
+                    t.match(T.Keyword, "LOCK") or \
+                    t.match(T.Keyword, "UNLOCK"):
                 continue
             elif t.match(T.Punctuation, ";"):
+                # TODO this is probably a MySQL-specific statement
                 continue
             elif in_target:
                 print("Got something else:", repr(t))

@@ -9,7 +9,7 @@ from dbsync.exceptions import DbSyncCompareException
 
 
 class ComparisonRepo:
-    _auto_inc_re = re.compile(r"\bAUTO_INCREMENT\s*=\s*(\d+)")
+    _auto_inc_re = re.compile(r"\bAUTO_INCREMENT(\s*=\s*(\d+))?")
 
     """The repository of the data used in comparing the tables"""
     def __init__(self):
@@ -58,20 +58,23 @@ Insert statements:
         tbl = self.get_table(pk.name)
         tbl.primary_keys = pk.primary_keys
 
-    def _update_columns(self, mod):
+    def _update_columns(self, mod: IM.Modification):
         tbl = self.get_table(mod.name)
         for col in mod.columns:
             tcol = tbl.get_column(col.name)
             tcol.datatype = col.datatype
             tcol.modifiers = col.modifiers
-            ComparisonRepo._set_auto_inc(tcol)
+            # ComparisonRepo._set_auto_inc(tcol)
+            tcol.auto_inc = col.auto_inc
+            tcol.auto_inc_val = col.auto_inc_val
 
     @classmethod
     def _set_auto_inc(cls, col):
         m = cls._auto_inc_re.search(col.modifiers)
         if m:
             col.auto_inc = True
-            col.auto_inc_val = int(m.group(1))
+            if m.group(2) is not None:
+                col.auto_inc_val = int(m.group(2))
         else:
             col.auto_inc = False
 
