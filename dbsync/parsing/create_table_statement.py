@@ -114,14 +114,12 @@ def get_columns(tl: sql.TokenList) -> Tuple[List[IM.Column], IM.PrimaryKey]:
 
     t_prev = None
     for t in tokens:
-        print(f"State: {State(state).name}, token: {repr(t)}")
         if t.ttype == T.Whitespace:
             continue
         elif t.ttype == T.Newline:
             # argh, if AUTO_INCREMENT appears at the end of a list of
             # column modifiers, we assume the comma means there is
             # more to come, not that we are at the end of a column def.
-            # so now, we are back in the same situation
             if state == State.MODIFIERS and match_tokens(t_prev, C.COMMA_TOKEN):
                 on_to_next_column()
             else:

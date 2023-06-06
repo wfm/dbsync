@@ -42,7 +42,6 @@ class AlterStatement:
         else:
             rest.insert_after(last_ix, C.RPAREN_TOKEN)
 
-        print(f"Tokens: {[repr(r) for r in rest]}")
         cols, _ = get_columns(rest)
         return IM.Modification(name, cols)
 

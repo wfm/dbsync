@@ -1,7 +1,7 @@
 """Compares data between the prod and staging databases"""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Dict
 
 from dbsync import intermediate as IM
@@ -14,6 +14,11 @@ class InsertDiffs:
     dst_table: IM.Table
     additions: List[Dict[str, str]]
     updates: List[InsertRecord]
+    table_msg: str = field(default="")
+
+    def _verbose_print(self, msg):
+        if Settings.obj().verbose_mode:
+            print(msg)
 
     def _pluralize(self, n: int, s: str) -> str:
         if n == 1:
@@ -37,6 +42,7 @@ class InsertDiffs:
         sql = []
         r = self._pluralize(add_len, "row")
         sql.append(f"-- Inserting {add_len} {r}:")
+        self._verbose_print(f"  Inserting {add_len} {r}")
         dst_cols = [f"`{col}`" for col in list(self.additions[0].keys())]
         col_str = ", ".join(dst_cols)
 
@@ -54,6 +60,8 @@ class InsertDiffs:
 
     def _generate_update(self, record: InsertRecord) -> List[str]:
         sql = []
+        if len(record.msg) > 0:
+            sql.append(f"-- {record.msg}")
         sql.append(f"UPDATE `{self.dst_table.name}`")
         assignments = [f"`{col}`={val}" for col, val in record.update_vals.items()]
         sql.append(f"SET {', '.join(assignments)}")
@@ -62,12 +70,19 @@ class InsertDiffs:
         return sql
 
     def generate_sql(self):
-        sql = self._generate_insert()
+        self._verbose_print(f"Updating table {self.dst_table.name}")
+        sql = []
+        if len(self.table_msg) > 0:
+            sql.append(f"-- {self.table_msg}")
+            self._verbose_print("  " + self.table_msg)
+
+        sql += self._generate_insert()
 
         upd_len = len(self.updates)
         if (upd_len > 0):
             r = self._pluralize(upd_len, "record")
             sql.append(f"-- Updating {upd_len} {r}:")
+            self._verbose_print(f"  Updating {upd_len} {r}")
             for upd in self.updates:
                 sql += self._generate_update(upd)
 
@@ -115,8 +130,10 @@ class CompareInsert:
         else:
             dstgen = Generator(dst)
 
-        add = []
-        update = []
+        add: List[Dict[str, str]] = []
+        update: List[InsertRecord] = []
+        would_have_updated = False
+        potential_updates = 0
 
         src_item = srcgen.get_next_item()
         if dstgen is None or not dstgen.is_open:
@@ -142,8 +159,9 @@ class CompareInsert:
                 # the key are the same but the data is different
                 # what should we do here? if the src record is newer,
                 # we probably want to copy it to dst. Otherwise, we
-                # don't want to do anything
-                if cls._get_time_info(src_item, dst_item, dst_table):
+                # don't want to do anything.
+                do_update, upd_msg, whu = cls._get_time_info(src_item, dst_item, dst_table)
+                if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
                     update_vals = cls._update_only_necessary_cols(src_item, dst_item)
                     update.append(
@@ -151,40 +169,46 @@ class CompareInsert:
                             src_item.key,
                             None,
                             src_item.key_vals,
-                            update_vals))
+                            update_vals,
+                            upd_msg))
+                elif whu:
+                    would_have_updated = True
+                    potential_updates += 1
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
 
-        return InsertDiffs(dst_table, add, update)
+        tbl_msg = ""
+        if would_have_updated:
+            tbl_msg = f"*** {potential_updates} records would have been updated, \
+but the table has no timestamp column ***"
+        return InsertDiffs(dst_table, add, update, tbl_msg)
 
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
     @classmethod
     def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table):
-        msg = f"Updating table {table.name} - "
+        msg = ""
         do_update = False
+        would_have_updated = False
         if table.timestamp_columns is None or \
                 len(table.timestamp_columns) == 0:
             # not certain whether to update or not to update
-            msg += "*** no time info available ***"
-            do_update = Settings.obj().update_tables_without_timestamp
+            do_update = Settings.obj().should_update_table(table.name)
+            would_have_updated = True
         else:
             src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
             dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
-            msg += f"src times: {src_times}, dst times: {dst_times}"
             try:
                 src = next(filter(CompareInsert._time_regex.match, src_times))
                 dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
                 do_update = src >= dst  # TODO is it ok to compare strings here?
+                msg = f"{src} >= {dst} => {do_update}"
             except StopIteration:
-                msg += ", *** StopIteration ***"
+                print("*** Time comparison raised StopIteration ***")
 
-        msg += f", result: {do_update}"
-        if not do_update:
-            print(msg)
-        return do_update
+        return (do_update, msg, would_have_updated)
 
     @classmethod
     def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):

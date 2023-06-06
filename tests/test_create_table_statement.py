@@ -51,6 +51,15 @@ DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci"
         assert table.primary_keys[0] == "id", "Table primary key should be 'id'"
         assert table.post_definition_modifiers == table_modifiers, "Table should have modifiers"
 
+    # TODO add test for:
+    sql_with_key = """CREATE TABLE `NhU_actionscheduler_claims` (
+  `claim_id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `date_created_gmt` datetime DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`claim_id`),
+  KEY `date_created_gmt` (`date_created_gmt`)
+) ENGINE=InnoDB AUTO_INCREMENT=8257 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+"""
+
     def _get_table(self, sql):
         repo = process_statements(sql, DB_NAME)
         repo.post_process()

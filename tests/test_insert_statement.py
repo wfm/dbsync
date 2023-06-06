@@ -4,6 +4,7 @@ from tests.fixtures import *
 from dbsync import intermediate as IM
 from dbsync.comparing.comparison_repo import ComparisonRepo
 
+# TODO test insert statements without column list
 
 # copied from https://docs.pytest.org/en/6.2.x/example/parametrize.html
 #   #parametrizing-test-methods-through-per-class-configuration

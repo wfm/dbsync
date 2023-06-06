@@ -3,6 +3,7 @@
 import re
 from typing import Dict, List, Any
 from pydantic import BaseModel, PrivateAttr
+from enum import Enum
 
 from dbsync.exceptions import DbSyncParseException
 
@@ -15,6 +16,11 @@ def to_camel(string: str) -> str:
     first = words.pop(0)
     rest = "".join(word.capitalize() for word in words)
     return first + rest
+
+
+class DmlOptions(Enum):
+    DISABLE_AUTO_INCREMENT = 1  # with ALTER TABLE statements
+    GENERATE_LOCK_TABLES = 2    # lock tables, disable keys, set auto-inc value
 
 
 class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
@@ -134,13 +140,22 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     # Controls what happens when data for a pair of
     # tables differ, but the tables don't have
     # a timestamp column
-    update_tables_without_timestamp: bool = False
+    update_tables_without_timestamp: bool = True
+
+    # Override the above
+    update_specific_tables_without_timestamp: Dict[str, bool] = {
+        "options": False
+    }
 
     # filename for generated sql, or None for stdout
     output_file: str | None = "output.sql"
     # if not None, generated sql is written here instead
     # of filename above. Shoud be of type TextIOWrapper
     file_descriptor: Any | None = None
+
+    verbose_mode: bool = False
+
+    dml_options: DmlOptions = DmlOptions.GENERATE_LOCK_TABLES
 
     _table_name_regex: re = PrivateAttr()
 
@@ -174,6 +189,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             base_name in self.included_tables
         exclude = base_name in self.excluded_tables
         return include and not exclude
+
+    def should_update_table(self, table_name: str) -> bool:
+        base_name = self.get_base_table_name(table_name)
+        result = self.update_specific_tables_without_timestamp.get(base_name)
+        if result is None:
+            result = self.update_tables_without_timestamp
+        return result
 
     def get_timestamp_cols(self, table_name):
         """

@@ -1,9 +1,7 @@
 # TODO
 ## Urgent
 * Integration tests - in progress
-* Summarize diffs to answer questions
 * Get it to work with dump from MySQL workbench
-* What about tables that don't have a timestamp column? Configure on a table-by-table basis?
 * Check autoincrement
 * Test with local MySQL
 * Some "comments" are actually MySQL-specific commands, like /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -45,44 +43,12 @@
 - increase line length - done
 - Get rid of "parser_toy"
 * Need ; at end of SET statements
+* Summarize diffs to answer questions
+* What about tables that don't have a timestamp column? Configure on a table-by-table basis?
 
+LOCK TABLES `staging_tbl_test0` WRITE;
+/*!40000 ALTER TABLE `staging_tbl_test0` DISABLE KEYS */;
+/*! ALTER TABLE `X` AUTO_INCREMENT=Y */;
 
-=============
-(venv) ➜  dbsync git:(main) ✗ python3 -m dbsync -d dbsync_test -t tbl_ /Users/billmurphy/dumps/Dump20230605a.sql
-dbsync from   : /Users/billmurphy/dumps/Dump20230605a.sql
-  database    : dbsync_test
-  table prefix: tbl_
-  output file : output.sql
-Table prefix: tbl_
--- db: dbsync_test in_target: True
-<class 'dbsync.exceptions.DbSyncParseException'> - Confusion, state: 1, token: <Keyword 'CHARAC...' at 0x101F5E140>
-Index: 6
-SQL: CREATE TABLE `staging_tbl_test0` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
-  `date_created_gmt` datetime DEFAULT '0000-00-00 00:00:00',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
-<class 'dbsync.exceptions.DbSyncParseException'> - Invalid INSERT statement
-Index: 4
-SQL: INSERT INTO `staging_tbl_test0` VALUES (1,'action-scheduler-migration','2023-06-05 12:11:35'),(2,'wpforms','2023-06-02 07:28:37'),(3,'wc-admin-data','2023-06-02 07:28:37'),(4,'woocommerce-db-updates','2023-06-02 07:28:37'),(5,'woocommerce-remote-inbox-engine','2023-06-02 07:28:37'),(6,'wp_mail_smtp','2023-06-02 07:28:37'),(7,'wc_update_product_default_cat','2023-06-02 07:28:37'),(8,'woocommerce_payments','2023-06-02 07:28:37'),(9,'wc_update_product_lookup_tables','2023-06-02 07:28:37');
-<class 'dbsync.exceptions.DbSyncParseException'> - Confusion, state: 1, token: <Keyword 'CHARAC...' at 0x101F4FAC0>
-Index: 6
-SQL: CREATE TABLE `tbl_test0` (
-  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
-  `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
-  `date_created_gmt` datetime DEFAULT '0000-00-00 00:00:00',
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
-<class 'dbsync.exceptions.DbSyncParseException'> - Invalid INSERT statement
-Index: 4
-SQL: INSERT INTO `tbl_test0` VALUES (1,'action-scheduler-migration','2023-06-05 12:11:35'),(2,'wpforms','2023-06-02 07:28:37'),(3,'wc-admin-data','2023-06-02 07:28:37'),(4,'woocommerce-db-updates','2023-06-02 07:28:37'),(5,'woocommerce-remote-inbox-engine','2023-06-02 07:28:37'),(6,'wp_mail_smtp','2023-06-02 07:28:37'),(7,'wc_update_product_default_cat','2023-06-02 07:28:37'),(8,'woocommerce_payments','2023-06-02 07:28:37'),(9,'wc_update_product_lookup_tables','2023-06-02 07:28:37');
-Timing:
-  Read and split file : 0.00
-  Process statements  : 0.01
-  Post-Processing     : 0.00
-  Compare and output  : 0.00
-  Total               : 0.01
-(venv) ➜  dbsync git:(main) ✗ 
-
-      ]
+/*!40000 ALTER TABLE `staging_tbl_test0` ENABLE KEYS */;
+UNLOCK TABLES;

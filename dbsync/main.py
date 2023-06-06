@@ -60,6 +60,7 @@ def get_args():
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.output_file = args.output
+    settings.verbose_mode = not args.quiet
     Settings.obj(settings)
     if not args.quiet:
         print("dbsync from   :", args.filename)
@@ -76,9 +77,6 @@ def main():
 
 
 def do_comparison(filename: str, quiet=True) -> None:
-    if not quiet:
-        print("Table prefix:", Settings.obj().tbl_prefix)
-
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())

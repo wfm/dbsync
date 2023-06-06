@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import List
 
 from dbsync.exceptions import DbSyncCompareException
-from dbsync.settings import Settings
+from dbsync.settings import DmlOptions, Settings
 
 
 class Quoted:
@@ -137,22 +137,37 @@ class Table(Intermediate, NameMixin):
         if autoinc_col is not None:
             autoinc_col.auto_inc_val = newval
 
-    def disable_autoinc(self, alt_name: str = None) -> str:
+    def disable_autoinc(self, alt_name: str = None, autoinc_val: int | None = None) -> str:
         sql = []
         autoinc_col = self._get_autoinc_column()
         if autoinc_col is not None:
-            sql.append("-- Disable auto-increment")
-            sql.append(self._start_sql("ALTER", alt_name))
-            sql.append("  MODIFY" + autoinc_col.generate_sql(";"))
+            if alt_name is None:
+                alt_name = self.name
+
+            if Settings.obj().dml_options == DmlOptions.DISABLE_AUTO_INCREMENT:
+                sql.append("-- Disable auto-increment")
+                sql.append(self._start_sql("ALTER", alt_name))
+                sql.append("  MODIFY" + autoinc_col.generate_sql(";"))
+            elif Settings.obj().dml_options == DmlOptions.GENERATE_LOCK_TABLES:
+                sql.append(f"LOCK TABLES `{alt_name}` WRITE;")
+                sql.append(f"/*!40000 ALTER TABLE `{alt_name}` DISABLE KEYS */;")
+                sql.append(f"/*!ALTER TABLE `{alt_name}` AUTO_INCREMENT={autoinc_val} */;")
         return "\n".join(sql)
 
     def enable_autoinc(self, alt_name: str = None, autoinc_val: int | None = None) -> str:
         sql = []
         autoinc_col = self._get_autoinc_column()
         if autoinc_col is not None:
-            sql.append("-- Enable auto-increment")
-            sql.append(self._start_sql("ALTER", alt_name))
-            sql.append("  MODIFY" + autoinc_col.generate_autoinc_sql(";", autoinc_val))
+            if alt_name is None:
+                alt_name = self.name
+
+            if Settings.obj().dml_options == DmlOptions.DISABLE_AUTO_INCREMENT:
+                sql.append("-- Enable auto-increment")
+                sql.append(self._start_sql("ALTER", alt_name))
+                sql.append("  MODIFY" + autoinc_col.generate_autoinc_sql(";", autoinc_val))
+            elif Settings.obj().dml_options == DmlOptions.GENERATE_LOCK_TABLES:
+                sql.append(f"/*!40000 ALTER TABLE `{alt_name}` ENABLE KEYS */;")
+                sql.append("UNLOCK TABLES;")
         return "\n".join(sql)
 
 

@@ -66,7 +66,6 @@ def process_statements(
                 before_use = False
                 us.is_target = us.value == target_database
                 in_target = us.is_target
-                print("-- db:", us.value, "in_target:", us.is_target)
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
             elif t.match(T.DML, "COMMIT") or \

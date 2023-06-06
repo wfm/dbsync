@@ -2,7 +2,7 @@
 
 from typing import List, Dict, Iterator, Tuple
 from operator import itemgetter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dbsync import intermediate as IM
 from dbsync.exceptions import DbSyncCompareException
@@ -15,6 +15,7 @@ class InsertRecord:
     insert_vals: Dict[str, str] | None
     key_vals: Dict[str, str]
     update_vals: Dict[str, str]
+    msg: str = field(default="")
 
 
 class UnpackedInsert:
