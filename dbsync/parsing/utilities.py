@@ -4,12 +4,16 @@ from sqlparse import sql
 from typing import List
 
 from dbsync.parsing.sql_statement import SqlStatement
+import dbsync.constants as C
 
 
 def match_tokens(ltoken: sql.Token, rtoken: sql.Token) -> bool:
     """
     Compares two tokens and returns true if the ttype and value are equal
     """
+    if ltoken.value == C.ANY or rtoken.value == C.ANY:
+        return ltoken.ttype == rtoken.ttype
+
     return ltoken.match(rtoken.ttype, rtoken.value)
 
 

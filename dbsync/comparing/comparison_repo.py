@@ -54,9 +54,9 @@ Insert statements:
 
             self.tables[table.name] = table
 
-    def _add_pk(self, pk):
-        tbl = self.get_table(pk.name)
-        tbl.primary_keys = pk.primary_keys
+    def _add_keys(self, key_list: IM.KeyList) -> None:
+        tbl = self.get_table(key_list.name)
+        tbl.keys = key_list.keys
 
     def _update_columns(self, mod: IM.Modification):
         tbl = self.get_table(mod.name)
@@ -98,8 +98,8 @@ Insert statements:
     def post_process(self):
         """Post-processing: updates pks, auto_inc, and inserts"""
         for im in self.parsed:
-            if isinstance(im, IM.PrimaryKey):
-                self._add_pk(im)
+            if isinstance(im, IM.KeyList):
+                self._add_keys(im)
             elif isinstance(im, IM.Modification):
                 self._update_columns(im)
 

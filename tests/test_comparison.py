@@ -17,9 +17,9 @@ class TestComparison:
                          table: IM.Table, insert0: IM.Insert, insert1: IM.Insert) -> \
             Tuple[IM.Table, IM.Insert, IM.Insert]:
         stg_name = Settings.obj().dst_prefix + table.name
-        stg_table = IM.Table(stg_name, table.columns, table.primary_keys)
+        stg_table = IM.Table(stg_name, table.columns, keys=table.keys)
         stg_insert0 = IM.Insert(stg_name, insert0.columns, insert0.values)
-        col_slc = slice(0, len(table.columns)-1)
+        col_slc = slice(0, len(table.columns) - 1)
         stg_data1 = [c[col_slc] for c in insert1.values]
         stg_insert1 = IM.Insert(stg_name, insert1.columns[col_slc], stg_data1)
         return (stg_table, stg_insert0, stg_insert1)

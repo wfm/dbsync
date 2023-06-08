@@ -29,6 +29,7 @@ class TestCreateTableStatement:
     def test_mysql_workbench_style(self):
         sql = [
             f"USE `{DB_NAME}`;",
+            # TODO should "unsigned" be part of the datatype or the modifiers?
             """CREATE TABLE `tbl_test0` (
   `id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `description` varchar(255) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_520_ci NOT NULL,
@@ -52,13 +53,55 @@ DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci"
         assert table.post_definition_modifiers == table_modifiers, "Table should have modifiers"
 
     # TODO add test for:
-    sql_with_key = """CREATE TABLE `NhU_actionscheduler_claims` (
+    sql_with_key = """CREATE TABLE `tbl_test0` (
   `claim_id` bigint unsigned NOT NULL AUTO_INCREMENT,
   `date_created_gmt` datetime DEFAULT '0000-00-00 00:00:00',
   PRIMARY KEY (`claim_id`),
   KEY `date_created_gmt` (`date_created_gmt`)
 ) ENGINE=InnoDB AUTO_INCREMENT=8257 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
 """
+    def test_mysql_workbench_style_with_keys(self):
+        sql = [
+            f"USE `{DB_NAME}`;",
+            """CREATE TABLE `tbl_test0` (
+  `claim_id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `random` varchar(255) NOT NULL,
+  `date_created_gmt` datetime DEFAULT '0000-00-00 00:00:00',
+  PRIMARY KEY (`claim_id`),
+  KEY `date_created_gmt` (`date_created_gmt`),
+  UNIQUE KEY `random_claim_key` (`random`(10), `claim_id`)
+) ENGINE=InnoDB AUTO_INCREMENT=8257 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci;
+"""
+        ]
+
+        self._pretest_setup()
+        table = self._get_table(sql)
+        assert len(table.primary_keys) == 1, "Table should have primary key"
+        assert table.primary_keys[0] == "claim_id", "Table primary key should be 'id'"
+        assert len(table.keys) == 3, "Table should have 3 keys"
+        # Assuming the keys are in the order they occur in the SQL
+        assert table.keys[0].name == "", "PK has no name"
+        assert table.keys[0].is_primary, "Should be primary key"
+        assert not table.keys[0].is_unique, "Should not be a UNIQUE key"
+        assert len(table.keys[0].columns) == 1, "PK should have 1 column"
+        assert table.keys[0].columns[0].name == "claim_id", "PK column should be named 'claim_id"
+        assert table.keys[0].columns[0].length is None, "PK column should not have a length"
+
+        assert table.keys[1].name == "date_created_gmt", "Key should be named 'date_created_gmt'"
+        assert not table.keys[1].is_primary, "Should not be primary key"
+        assert not table.keys[1].is_unique, "Should not be a UNIQUE key"
+        assert len(table.keys[1].columns) == 1, "'date_created_gmt' should have 1 column"
+        assert table.keys[1].columns[0].name == "date_created_gmt", "Key column should be named 'date_created_gmt"
+        assert table.keys[1].columns[0].length is None, "Key column should not have a length"
+
+        assert table.keys[2].name == "random_claim_key", "Key should be named 'random_claim_key'"
+        assert not table.keys[2].is_primary, "Should not be primary key"
+        assert table.keys[2].is_unique, "Should be a UNIQUE key"
+        assert len(table.keys[2].columns) == 2, "'random_claim_key' should have 2 columns"
+        assert table.keys[2].columns[0].name == "random", "Key column 1 should be named 'random"
+        assert table.keys[2].columns[0].length == 10, "Key column 1 have length of 10"
+        assert table.keys[2].columns[1].name == "claim_id", "Key column 2 should be named 'claim_id"
+        assert table.keys[2].columns[1].length is None, "Key column 2 should not have a length"
 
     def _get_table(self, sql):
         repo = process_statements(sql, DB_NAME)

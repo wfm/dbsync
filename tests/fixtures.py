@@ -55,7 +55,8 @@ def columns():
 
 @pytest.fixture(scope="module")
 def table(columns):
-    return IM.Table(TABLE_NAME, columns, PK_COLUMNS)
+    pk = IM.Key("", [IM.KeyColumn(name) for name in PK_COLUMNS], is_primary=True)
+    return IM.Table(TABLE_NAME, columns, keys=[pk])
 
 
 @pytest.fixture(scope="module")

@@ -35,6 +35,23 @@ class Intermediate:
 
 
 @dataclass
+class KeyColumn(NameMixin):
+    """Represents a column in a KEY specification"""
+    length: int | None = field(default=None)
+
+
+@dataclass
+class Key(Intermediate, NameMixin):
+    """Represents a KEY specification"""
+    columns: List[KeyColumn] = field(default_factory=list)
+    is_primary: bool = field(default=False)
+    is_unique: bool = field(default=False)
+
+    def add_column(self, col: KeyColumn) -> None:
+        self.columns.append(col)
+
+
+@dataclass
 class Column(NameMixin):
     """Represents a column within a table definition"""
     datatype: str
@@ -76,9 +93,9 @@ class Column(NameMixin):
 class Table(Intermediate, NameMixin):
     """Represents a table definition"""
     columns: List[Column]
-    primary_keys: List[str] = field(default_factory=list)
     timestamp_columns: List[str] = field(default_factory=list)
     post_definition_modifiers: str = field(default="")
+    keys: List[Key] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()
@@ -88,6 +105,18 @@ class Table(Intermediate, NameMixin):
     def count(self) -> int:
         """Returns the number of columns in the table"""
         return len(self.columns)
+
+    @property
+    def primary_keys(self) -> List[str]:
+        """Returns the names of the PK columns"""
+        pk = [key for key in self.keys if key.is_primary]
+        if len(pk) == 1:
+            names = [c.name for c in pk[0].columns]
+            return names
+        raise DbSyncCompareException("Table has no primary key columns")
+
+    def append_key(self, key: Key) -> None:
+        self.keys.append(key)
 
     def get_column(self, name: str) -> Column:
         """Gets a column by name"""
@@ -112,9 +141,8 @@ class Table(Intermediate, NameMixin):
             sql.append(col.generate_sql())
         # get rid of final comma
         sql[-1:][0].rstrip(",")
-        # TODO should get all this crap from the prod table definition
-        sql.append(") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 \
-                   COLLATE=utf8mb4_unicode_520_ci;")
+
+        sql.append(f") {self.post_definition_modifiers};")
         return "\n".join(sql)
 
     def _get_autoinc_column(self) -> Column | None:
@@ -214,12 +242,9 @@ class Alteration(Intermediate, NameMixin):
 
 
 @dataclass
-class PrimaryKey(Alteration):
-    """Represents a primary key specification"""
-    primary_keys: List[str]
-
-    def __post_init__(self):
-        self.primary_keys = [Quoted.fix_name(n) for n in self.primary_keys]
+class KeyList(Alteration):
+    """Represents key specifications in an ALTER TABLE statement"""
+    keys: List[Key]
 
 
 @dataclass

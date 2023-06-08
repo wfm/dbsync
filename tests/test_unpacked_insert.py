@@ -9,7 +9,13 @@ class TestUnpackedInsert(unittest.TestCase):
     def test_dedup_normal_case(self):
         name = TABLE_NAME
         cols = ["a", "b", "c"]
-        table = IM.Table(name, [], ["a", "b"])
+        key_list = [
+            IM.Key("", [
+                IM.KeyColumn("a"),
+                IM.KeyColumn("b")
+            ], True, False)
+        ]
+        table = IM.Table(name, [], keys=key_list)
 
         v1 = [
             [1, 2, 3],
@@ -40,8 +46,14 @@ class TestUnpackedInsert(unittest.TestCase):
     def test_generator(self):
         name = TABLE_NAME
         cols = ["f1", "f2", "f3", "f4"]
-        pk = ["f1", "f2"]
-        table = IM.Table(name, [], pk)
+        key_list = [
+            IM.Key("", [
+                IM.KeyColumn("f1"),
+                IM.KeyColumn("f2")
+            ], True, False)
+        ]
+
+        table = IM.Table(name, [], keys=key_list)
 
         v = [
             ["1", "2", "3", "4"],

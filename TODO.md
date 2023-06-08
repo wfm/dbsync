@@ -52,3 +52,23 @@ LOCK TABLES `staging_tbl_test0` WRITE;
 
 /*!40000 ALTER TABLE `staging_tbl_test0` ENABLE KEYS */;
 UNLOCK TABLES;
+
+
+Parsing keys
+
+--
+-- Indexes for table `NhU_actionscheduler_logs`
+--
+ALTER TABLE `NhU_actionscheduler_logs`
+  ADD PRIMARY KEY (`log_id`),
+  ADD KEY `action_id` (`action_id`),
+  ADD KEY `log_date_gmt` (`log_date_gmt`);
+
+--
+-- Indexes for table `NhU_ce4wp_abandoned_checkout`
+--
+ALTER TABLE `NhU_ce4wp_abandoned_checkout`
+  ADD PRIMARY KEY (`checkout_id`),
+  ADD UNIQUE KEY `checkout_uuid` (`checkout_uuid`);
+
+
