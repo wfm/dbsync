@@ -43,15 +43,16 @@ MODIFY_DATA = [
     ["29", "'u'", "'O'", "'P'"]
 ]
 
+# note: unique index is on 4th column on chars 0..4 (not counting quotes)
 SRC_UNIQ_TEST = [
-    ["01", "'A'", "'B'", "'key 1'"],
-    ["02", "'C'", "'D'", "'key 2'"]
+    ["01", "'A'", "'B'", "'key 1-src'"],
+    ["02", "'C'", "'D'", "'key 2-src'"]
 ]
 LEN_UNIQ_TEST = len(SRC_UNIQ_TEST)
 
 DST_UNIQ_TEST = [
-    ["02", "'C'", "'D'", "'key 2'"],
-    ["03", "'E'", "'F'", "'key 1'"]
+    ["02", "'C'", "'D'", "'key 2-dst'"],
+    ["03", "'E'", "'F'", "'key 1-dst'"]
 ]
 
 
@@ -68,8 +69,13 @@ def columns():
 @pytest.fixture(scope="module")
 def table(columns):
     pk = IM.Key("", [IM.KeyColumn(name) for name in PK_COLUMNS], is_primary=True)
-    uk = IM.Key("f4_unique", [IM.KeyColumn("f4", 5)], is_unique=True)
-    return IM.Table(TABLE_NAME, columns, keys=[pk, uk])
+    return IM.Table(TABLE_NAME, columns, keys=[pk])
+
+
+@pytest.fixture(scope="module")
+def unique_key():
+    return IM.Key("f4_unique", [IM.KeyColumn("f4", 5)], is_unique=True)
+
 
 class DataSources(Enum):
     INSERT = 0

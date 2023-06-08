@@ -97,10 +97,10 @@ WHERE `f1`=17 AND `f2`='i';"""
             )
         ],
         "test_unique": [
-            dict(expected_sql="""-- Inserting 1 record:
-INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
-(03, 'E', 'F', 'key 1');"""
-                 )
+            dict(expected_sql="""-- Updating 1 record:
+UPDATE `NhU_test_table`
+SET `f4`='key 2-src'
+WHERE `f1`=02 AND `f2`='C';""")
         ]
     }
 
@@ -113,13 +113,17 @@ INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
                     get_unpacked_insert, table):
         src = get_unpacked_insert(src_sl, src_mod)
         dst = get_unpacked_insert(dst_sl, dst_mod)
-        ci = CompareInsert()
-        actual = ci.compare(src, dst, table)
+        print("*** SRC:")
+        print(repr(src))
+        print("*** DST:")
+        print(repr(dst))
+
+        #ci = CompareInsert()
+        actual = CompareInsert.compare(src, dst, table)
         actual_data = self._pack(actual.additions)
 
-        if actual_data != INSERT_DATA[add_sl]:
-            for zz in zip(actual_data, INSERT_DATA[add_sl], strict=True):
-                print(f"act: {zz[0]}, exp: {zz[1]}")
+        print("*** ACTUAL DATA:")
+        print(actual_data)
 
         assert actual_data == INSERT_DATA[add_sl], "actual_data"            # noqa: S101, E501
         if src_mod or dst_mod:
@@ -144,14 +148,15 @@ INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
         print(f"src: {repr(src)}")
         print(f"dst: {repr(dst)}")
 
-        ci = CompareInsert()
-        ins_diffs = ci.compare(src, dst, table)
+        #ci = CompareInsert()
+        ins_diffs = CompareInsert.compare(src, dst, table)
         actual_sql = ins_diffs.generate_sql()
         print("SQL:")
         print(actual_sql)
         assert actual_sql == expected_sql       # noqa: S101
 
-    def test_unique(self, expected_sql, get_unpacked_insert, table):
+    def test_unique(self, expected_sql, get_unpacked_insert, table, unique_key):
+        table.append_key(unique_key)
         slc = slice(0, LEN_UNIQ_TEST)
         src = get_unpacked_insert(slc, DataSources.SRC)
         dst = get_unpacked_insert(slc, DataSources.DST)
@@ -159,8 +164,8 @@ INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
         print(f"src: {repr(src)}")
         print(f"dst: {repr(dst)}")
 
-        ci = CompareInsert()
-        ins_diffs = ci.compare(src, dst, table)
+        #ci = CompareInsert()
+        ins_diffs = CompareInsert.compare(src, dst, table)
         actual_sql = ins_diffs.generate_sql()
         print("SQL:")
         print(actual_sql)

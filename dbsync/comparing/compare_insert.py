@@ -142,11 +142,16 @@ class CompareInsert:
             dst_item = dstgen.get_next_item()
 
         while srcgen.is_open:
-            if dstgen is None or not dstgen.is_open or \
-               src_item.key < dst_item.key:
+            if dstgen is None or not dstgen.is_open:
                 # if dst is closed, copy remaining records from src into dst
-                # if src key < dst key, insert this record into dst
                 add.append(src_item.insert_vals)
+                src_item = srcgen.get_next_item()
+            elif src_item.key < dst_item.key:
+                # if src key < dst key, insert this record into dst
+                # unless there is a dst record with a greater key and the same 
+                # unique columns
+                if not dst.appears_later(src_item):
+                    add.append(src_item.insert_vals)
                 src_item = srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
@@ -161,7 +166,8 @@ class CompareInsert:
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything.
                 do_update, upd_msg, whu = cls._get_time_info(src_item, dst_item, dst_table)
-                if do_update:
+                not_later = not dst.appears_later(src_item)
+                if do_update and not_later:
                     # TODO use separate InsertRecord and UpdateRecord?
                     update_vals = cls._update_only_necessary_cols(src_item, dst_item)
                     update.append(

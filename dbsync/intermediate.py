@@ -16,7 +16,6 @@ class Quoted:
         m = cls._re.match(name)
         if m:
             return m.group(1)
-
         return name
 
 
@@ -49,6 +48,12 @@ class Key(Intermediate, NameMixin):
 
     def add_column(self, col: KeyColumn) -> None:
         self.columns.append(col)
+
+    def get_column_names(self) -> List[str]:
+        return [col.name for col in self.columns]
+
+    def get_column_lengths(self) -> List[str]:
+        return [col.length for col in self.columns]
 
 
 @dataclass
@@ -114,6 +119,17 @@ class Table(Intermediate, NameMixin):
             names = [c.name for c in pk[0].columns]
             return names
         raise DbSyncCompareException("Table has no primary key columns")
+
+    def get_unique_key(self) -> Key | None:
+        """Returns the unique key, if any"""
+        keys = [key for key in self.keys if key.is_unique]
+        if len(keys) == 0:
+            return None
+        elif len(keys) == 1:
+            return keys[0]
+        else:
+            raise DbSyncCompareException("Table has multiple unique keys - \
+                                         I assumed there would be at most 1")
 
     def append_key(self, key: Key) -> None:
         self.keys.append(key)

@@ -68,11 +68,9 @@ Won't there be overlap of ids in tables where data was added in both systems?
 What if we use a dict where the key is the unique columns in the dst table and the value is the primary key
 When looking at a src record, check that the dst record doesn't already have a higher pk value
 
+Implemented the above and am getting:
+15:06:35	INSERT INTO `staging_NhU_options` (`option_id`, `option_name`, `option_value`, `autoload`) VALUES (66748, 'endurance_cloudflare_enabled', 'basic', 'yes'), (66913, 'wc_connect_error_notice', 'Error retrieving the tax rates. Received (401): {\"statusCode\":401,\"error\":\"Unauthorized\",\"message\":\"Invalid credentials\",\"attributes\":{\"error\":\"Invalid credentials\"}}', 'yes'), **(68456, 'loginlockdown_meta',** 
+Error Code: 1062. Duplicate entry 'loginlockdown_meta' for key 'staging_nhu_options.option_name'	0.013 sec
 
-
-10:03:58	INSERT INTO `staging_NhU_options` (`option_id`, `option_name`, `option_value`, `autoload`) VALUES (164, 'nfd_data_token', 
-Error Code: 1062. Duplicate entry 'nfd_data_token' for key 'staging_nhu_options.option_name'	0.012 sec
-
-
-Error Code: 1192. Can't execute the given command because you have *active locked tables or an active transaction*
-
+I guess if you copy the src to the dst, you need to delete the old src record.
+Will there ever be an update?
