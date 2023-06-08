@@ -2,13 +2,8 @@
 ## Urgent
 * Integration tests - in progress
 * Get it to work with dump from MySQL workbench
-* Check autoincrement
 * Test with local MySQL
 * Some "comments" are actually MySQL-specific commands, like /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
-* After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
-* Use ALTER TABLE ... DISABLE KEYS
-* Use ALTER TABLE ... AUTO_INCREMENT [=] value
-* Do we really need to disable autoinc if our next value is set high enough?
 
 ## Medium-term
 * Refactoring
@@ -25,6 +20,7 @@
 * If there are more than N diffs, truncate the dst table and reload? But how to tell if src is more recent?
 * Use LOCK TABLES `tbl_test0` WRITE; and UNLOCK TABLES?
 * Generalize the state machine code
+* After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
 
 ## Future
 * Implement stage -> prod
@@ -45,6 +41,10 @@
 * Need ; at end of SET statements
 * Summarize diffs to answer questions
 * What about tables that don't have a timestamp column? Configure on a table-by-table basis?
+* Use ALTER TABLE ... DISABLE KEYS
+* Use ALTER TABLE ... AUTO_INCREMENT [=] value
+* Do we really need to disable autoinc if our next value is set high enough?
+* Check autoincrement
 
 LOCK TABLES `staging_tbl_test0` WRITE;
 /*!40000 ALTER TABLE `staging_tbl_test0` DISABLE KEYS */;
@@ -53,22 +53,26 @@ LOCK TABLES `staging_tbl_test0` WRITE;
 /*!40000 ALTER TABLE `staging_tbl_test0` ENABLE KEYS */;
 UNLOCK TABLES;
 
+--------
+Apparently, the older options get deleted and new options (same option_name, higher option_id)
+are inserted into the table.
 
-Parsing keys
+Do we want to enforce unique keys?
+a.) by convoluted sql like where not exists (select 1 from tbl where uniquecol = 'x'), or 
+b.) by filtering the data
 
---
--- Indexes for table `NhU_actionscheduler_logs`
---
-ALTER TABLE `NhU_actionscheduler_logs`
-  ADD PRIMARY KEY (`log_id`),
-  ADD KEY `action_id` (`action_id`),
-  ADD KEY `log_date_gmt` (`log_date_gmt`);
+Other thoughts:
+Insert records into dest with higher src id's?
+Won't there be overlap of ids in tables where data was added in both systems?
 
---
--- Indexes for table `NhU_ce4wp_abandoned_checkout`
---
-ALTER TABLE `NhU_ce4wp_abandoned_checkout`
-  ADD PRIMARY KEY (`checkout_id`),
-  ADD UNIQUE KEY `checkout_uuid` (`checkout_uuid`);
+What if we use a dict where the key is the unique columns in the dst table and the value is the primary key
+When looking at a src record, check that the dst record doesn't already have a higher pk value
 
+
+
+10:03:58	INSERT INTO `staging_NhU_options` (`option_id`, `option_name`, `option_value`, `autoload`) VALUES (164, 'nfd_data_token', 
+Error Code: 1062. Duplicate entry 'nfd_data_token' for key 'staging_nhu_options.option_name'	0.012 sec
+
+
+Error Code: 1192. Can't execute the given command because you have *active locked tables or an active transaction*
 

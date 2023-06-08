@@ -1,5 +1,6 @@
 """Reusable test fixtures"""
 
+from enum import Enum
 import pytest
 from typing import Callable
 
@@ -42,6 +43,17 @@ MODIFY_DATA = [
     ["29", "'u'", "'O'", "'P'"]
 ]
 
+SRC_UNIQ_TEST = [
+    ["01", "'A'", "'B'", "'key 1'"],
+    ["02", "'C'", "'D'", "'key 2'"]
+]
+LEN_UNIQ_TEST = len(SRC_UNIQ_TEST)
+
+DST_UNIQ_TEST = [
+    ["02", "'C'", "'D'", "'key 2'"],
+    ["03", "'E'", "'F'", "'key 1'"]
+]
+
 
 @pytest.fixture(scope="module")
 def columns():
@@ -56,16 +68,28 @@ def columns():
 @pytest.fixture(scope="module")
 def table(columns):
     pk = IM.Key("", [IM.KeyColumn(name) for name in PK_COLUMNS], is_primary=True)
-    return IM.Table(TABLE_NAME, columns, keys=[pk])
+    uk = IM.Key("f4_unique", [IM.KeyColumn("f4", 5)], is_unique=True)
+    return IM.Table(TABLE_NAME, columns, keys=[pk, uk])
+
+class DataSources(Enum):
+    INSERT = 0
+    MODIFY = 1
+    SRC = 2
+    DST = 3
 
 
 @pytest.fixture(scope="module")
-def get_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
-    def _get_insert_stmt(slc: slice, use_modify: bool = False) -> IM.Insert:
-        if use_modify:
-            data = MODIFY_DATA[slc]
-        else:
+def get_insert_stmt(table) -> Callable[[slice, DataSources], IM.Insert]:
+    def _get_insert_stmt(slc: slice, datasrc: DataSources = DataSources.INSERT) -> IM.Insert:
+        if datasrc == DataSources.INSERT:
             data = INSERT_DATA[slc]
+        elif datasrc == DataSources.MODIFY:
+            data = MODIFY_DATA[slc]
+        elif datasrc == DataSources.SRC:
+            data = SRC_UNIQ_TEST
+        elif datasrc == DataSources.DST:
+            data = DST_UNIQ_TEST
+
         return IM.Insert(TABLE_NAME, COLUMN_NAMES, data)
 
     return _get_insert_stmt
@@ -74,7 +98,7 @@ def get_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
 @pytest.fixture(scope="module")
 def get_narrow_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
     def _get_narrow_insert_stmt(slc: slice, use_modify: bool = False) -> IM.Insert:
-        inner_slc = slice(0, len(table.columns)-1)
+        inner_slc = slice(0, len(table.columns) - 1)
         if use_modify:
             data = MODIFY_DATA
         else:
@@ -86,9 +110,9 @@ def get_narrow_insert_stmt(table) -> Callable[[slice, bool], IM.Insert]:
 
 
 @pytest.fixture(scope="module")
-def get_unpacked_insert(table, get_insert_stmt) -> Callable[[slice, bool], UnpackedInsert]:
-    def _get_unpacked_insert(slc: slice, use_modify: bool) -> UnpackedInsert:
-        insert = get_insert_stmt(slc, use_modify)
+def get_unpacked_insert(table, get_insert_stmt) -> Callable[[slice, DataSources], UnpackedInsert]:
+    def _get_unpacked_insert(slc: slice, datasrc: DataSources) -> UnpackedInsert:
+        insert = get_insert_stmt(slc, datasrc)
         return UnpackedInsert(table, insert)
 
     return _get_unpacked_insert

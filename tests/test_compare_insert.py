@@ -1,6 +1,5 @@
 from tests.fixtures import *
 from dbsync.comparing.compare_insert import CompareInsert
-from dbsync.settings import Settings
 
 
 # copied from https://docs.pytest.org/en/6.2.x/example/parametrize.html
@@ -24,8 +23,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, 0),
                 add_sl=slice(0, DATA_LEN),
                 upd_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT
             ),
             # src and dst have same data -> no add or upd needed
             dict(
@@ -33,8 +32,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, DATA_LEN),
                 add_sl=slice(0, 0),
                 upd_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT
             ),
             # src is empty, dst has data -> no add or upd needed
             dict(
@@ -42,8 +41,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, DATA_LEN),
                 add_sl=slice(0, 0),
                 upd_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT
             ),
             # variation on previous
             dict(
@@ -51,8 +50,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, DATA_LEN),
                 add_sl=slice(0, 0),
                 upd_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT
             ),
             # src has rows not in dst -> adds output for missing rows
             dict(
@@ -60,8 +59,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, DATA_LEN, 2),
                 add_sl=slice(1, DATA_LEN, 2),
                 upd_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT
             ),
             # src has different data from dst -> updates output
             # for now, we output both the src and dst data
@@ -70,8 +69,8 @@ class TestCompareInsert:
                 dst_sl=slice(0, DATA_LEN),
                 add_sl=slice(0, 0),
                 upd_sl=slice(0, DATA_LEN),
-                src_mod=True,
-                dst_mod=False
+                src_mod=DataSources.MODIFY,
+                dst_mod=DataSources.INSERT
             ),
         ],
         "test_insert_diffs": [
@@ -79,8 +78,8 @@ class TestCompareInsert:
             dict(
                 src_sl=slice(0, 1),
                 dst_sl=slice(0, 0),
-                src_mod=False,
-                dst_mod=False,
+                src_mod=DataSources.INSERT,
+                dst_mod=DataSources.INSERT,
                 expected_sql="""-- Inserting 1 row:
 INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
 (01, '2', '3', '4');"""
@@ -89,16 +88,21 @@ INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
             dict(
                 src_sl=slice(4, 5),
                 dst_sl=slice(4, 5),
-                src_mod=True,
-                dst_mod=False,
+                src_mod=DataSources.MODIFY,
+                dst_mod=DataSources.INSERT,
                 expected_sql="""-- Updating 1 record:
 UPDATE `NhU_test_table`
 SET `f3`='I', `f4`='J'
 WHERE `f1`=17 AND `f2`='i';"""
             )
+        ],
+        "test_unique": [
+            dict(expected_sql="""-- Inserting 1 record:
+INSERT INTO `NhU_test_table` (`f1`, `f2`, `f3`, `f4`) VALUES
+(03, 'E', 'F', 'key 1');"""
+                 )
         ]
     }
-
 
     def _pack(self, packed):
         return [list(d.values()) for d in packed]
@@ -136,6 +140,21 @@ WHERE `f1`=17 AND `f2`='i';"""
                           get_unpacked_insert, table):
         src = get_unpacked_insert(src_sl, src_mod)
         dst = get_unpacked_insert(dst_sl, dst_mod)
+
+        print(f"src: {repr(src)}")
+        print(f"dst: {repr(dst)}")
+
+        ci = CompareInsert()
+        ins_diffs = ci.compare(src, dst, table)
+        actual_sql = ins_diffs.generate_sql()
+        print("SQL:")
+        print(actual_sql)
+        assert actual_sql == expected_sql       # noqa: S101
+
+    def test_unique(self, expected_sql, get_unpacked_insert, table):
+        slc = slice(0, LEN_UNIQ_TEST)
+        src = get_unpacked_insert(slc, DataSources.SRC)
+        dst = get_unpacked_insert(slc, DataSources.DST)
 
         print(f"src: {repr(src)}")
         print(f"dst: {repr(dst)}")

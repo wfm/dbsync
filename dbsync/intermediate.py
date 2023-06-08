@@ -211,7 +211,7 @@ class Set(Intermediate):
     """Represents a set statement"""
     value: str
 
-    def generate_sql(self) -> str:
+    def dont_use_generate_sql(self) -> str:
         # The value is "X = Y"
         return f"SET {self.value};"
 
@@ -230,7 +230,10 @@ class Use(Intermediate):
         if not self.is_target:
             return ""
 
-        return f"""USE `{self.value}`;
+        return f"""SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+SET AUTOCOMMIT = 0;
+SET time_zone = "+00:00";
+USE `{self.value}`;
 -- Note: there is no commit at the end of the file
 START TRANSACTION;"""
 
