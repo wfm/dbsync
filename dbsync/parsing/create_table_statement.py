@@ -1,9 +1,10 @@
 """Parses create table statements"""
 
+from dataclasses import dataclass, field
 from sqlparse import sql
 from sqlparse import tokens as T
 from enum import IntEnum
-from typing import List, Tuple
+from typing import Callable, List, Tuple, Dict
 
 from dbsync.exceptions import DbSyncParseException
 from dbsync import constants as C
@@ -14,89 +15,321 @@ from dbsync.parsing.utilities \
 from dbsync.settings import Settings
 
 
-# Maybe this should go back to alter_statement.py:
-def get_pk_columns(name: str, ss: SqlStatement) -> List[str]:
-    pk_columns = []
-    t = ss.get_token()
-    if (isinstance(t, sql.Parenthesis)):
-        iss = SqlStatement(None, t)
-        iss.eat_token(C.LPAREN_TOKEN)
-        it = iss.get_token()
-        while it is not None and not match_tokens(it, C.RPAREN_TOKEN):
-            pk_columns += it.value.split(",")
-            it = iss.get_token()
+class ColumnState(IntEnum):
+    OPEN_PAREN = 0
+    IDENTIFIER = 1      # may also get PRIMARY, UNIQUE, or KEY here
+    DATA_TYPE = 2
+    POST_DATA_TYPE = 3
+    DATA_SIZE = 4
+    MODIFIERS = 5
+    KEY = 6
+    KEY_NAME = 7
+    KEY_COLS_START = 8
+    KEY_COL_NAME = 9
+    KEY_COL_LENGTH = 10
+    KEY_COL_LENGTH_END = 11
+    KEY_COLS_END = 12
+    CLOSE_PAREN = 13
 
-    return IM.PrimaryKey(name, pk_columns)
+
+@dataclass
+class ActionParams:
+    """Parameters passed to an action_method"""
+    state: ColumnState
+    t_prev: sql.Token
+    t_curr: sql.Token
 
 
-def get_columns(tl: sql.TokenList) -> Tuple[List[IM.Column], IM.PrimaryKey]:
-    """ Gets column definitions for a CREATE TABLE statement """
-    class State(IntEnum):
-        OPEN_PAREN = 0
-        IDENTIFIER = 1
-        DATA_TYPE = 2
-        POST_DATA_TYPE = 3
-        DATA_SIZE = 4
-        MODIFIERS = 5
-        KEY = 6
-        PK_START = 7
-        PK_COLS = 8
-        PK_END = 9
-        CLOSE_PAREN = 10
+@dataclass
+class Action:
+    """Defines one action that may be performed based on current state"""
+    current_state: ColumnState | None
+    expected_token: sql.Token | None
+    action_method: Callable[[ActionParams], ColumnState | None]
+    next_state: ColumnState | None
 
-    state = State.OPEN_PAREN
-    cols: List[IM.Column] = []
-    tokens = get_flattened_tokens(tl)
-    name = ""
-    datatype = ""
-    modifiers = []
-    has_auto_increment = False
-    grab_auto_increment_value = False
-    auto_increment_value = 0
-    pk_columns = []
+    def __repr__(self) -> str:
+        s = "("
+        s += "None" if self.current_state is None else ColumnState(self.current_state).name
+        s += ", "
+        s += "None" if self.expected_token is None else f"'{self.expected_token.value}'"
+        s += ", "
+        s += "None" if self.action_method is None else self.action_method
+        s += ", "
+        s += "None" if self.next_state is None else self.next_state.name
+        s += ")"
+        return s
 
-    def check_for_end_of_column(t: T.Token, is_column: bool = True) -> bool:
-        nonlocal state
 
+class ParserActions:
+    """The data we need to keep track of while parsing column defs and methods to alter it"""
+    def __init__(self):
+        self.cols: List[IM.Column] = []
+        self.keys: List[IM.Key] = []
+        self._reset_for_next_column(ColumnState.OPEN_PAREN)
+
+    def _reset_for_next_column(self, state: ColumnState = ColumnState.IDENTIFIER) -> None:
+        self.state = state      # TODO should this be here or in StateMachine?
+        self.name = ""
+        self.datatype = ""
+        self.modifiers = []
+        self.has_auto_increment = False
+        self.grab_auto_increment_value = False
+        self.auto_increment_value = 0
+        self.is_primary = False
+        self.is_unique = False
+        self.current_key: IM.Key | None = None
+        self.current_key_column: IM.KeyColumn | None = None
+        self.save_prev = True
+
+    def reset_for_next_token(self):
+        self.save_prev = True
+
+    def _continue_action(self, params: ActionParams) -> ColumnState | None:     # NOSONAR S1172
+        self.save_prev = False
+
+    def _newline_special_case(self, params: ActionParams) -> ColumnState | None:
+        #
+        # argh, if AUTO_INCREMENT appears at the end of a list of
+        # column modifiers, we assume the comma means there is
+        # more to come, not that we are at the end of a column def.
+        if self.state == ColumnState.MODIFIERS and match_tokens(params.t_prev, C.COMMA_TOKEN):
+            # TODO in this case, there will be a trailing comma in the modifier list
+            self._on_to_next_column()
+        self.save_prev = False
+
+    def _save_name(self, params: ActionParams) -> ColumnState | None:
+        self.name = params.t_curr.value
+
+    def _set_primary(self, params: ActionParams) -> ColumnState | None:     # NOSONAR S1172
+        self.is_primary = True
+
+    def _set_unique(self, params: ActionParams) -> ColumnState | None:      # NOSONAR S1172
+        self.is_unique = True
+
+    def _accumulate_datatype(self, params: ActionParams) -> ColumnState | None:
+        self.datatype += params.t_curr.value
+        return ColumnState.MODIFIERS if match_tokens(params.t_curr, C.RPAREN_TOKEN) else None
+
+    def _accumulate_modifiers(self, params: ActionParams) -> ColumnState | None:
+        # need to check for auto increment
+        if self.grab_auto_increment_value and params.t_curr.ttype == T.Number.Integer:
+            self.grab_auto_increment_value = False
+            self.auto_increment_value = int(params.t_curr.value)
+
+        if match_tokens(params.t_curr, C.AUTO_INCREMENT_TOKEN):
+            self.has_auto_increment = True
+            self.grab_auto_increment_value = True
+
+        # Special case:
+        # AUTO_INCREMENT, AUTO_INCREMENT=1244
+        # We get tripped up on the comma
+        auto_inc_comma = params.t_prev is not None and \
+            match_tokens(params.t_prev, C.AUTO_INCREMENT_TOKEN) \
+            and match_tokens(params.t_curr, C.COMMA_TOKEN)
+
+        if auto_inc_comma or not self._check_for_end_of_column(params.t_curr):
+            if isinstance(params.t_curr, sql.IdentifierList):
+                self.modifiers += [x.value for x in get_id_list_tokens(params.t_curr)]
+            else:
+                self.modifiers.append(params.t_curr.value)
+            return ColumnState.MODIFIERS
+        return None
+
+    def _check_keytype(self, params: ActionParams) -> ColumnState | None:       # NOSONAR S1172
+        self.current_key = IM.Key("", [], self.is_primary, self.is_unique)
+
+        if self.is_primary:
+            return ColumnState.KEY_COLS_START
+        return ColumnState.KEY_COL_NAME
+
+    def _save_key_name(self, params: ActionParams) -> ColumnState | None:
+        self.current_key.name = params.t_curr.value
+
+    def _save_key_col_name(self, params: ActionParams) -> ColumnState | None:
+        self.current_key_column = IM.KeyColumn(params.t_curr.value)
+
+    def _save_key_col_length(self, params: ActionParams) -> ColumnState | None:
+        self.current_key_column.length = int(params.t_curr.value)
+
+    def _save_key_col(self, params: ActionParams) -> ColumnState | None:        # NOSONAR S1172
+        if self.current_key_column is not None:
+            self.current_key.add_column(self.current_key_column)
+            self.current_key_column = None
+
+    def _save_key(self, params: ActionParams) -> ColumnState | None:
+        if self.current_key is not None:
+            self._save_key_col(params)
+            self.keys.append(self.current_key)
+            self.current_key = None
+
+    def _check_for_end_of_column(self, t: T.Token, is_column: bool = True) -> bool:
         at_end = False
         # lol, comma ends a column def except when it doesn't
         # in particular, we have AUTO_INCREMENT, AUTO_INCREMENT=1244
         # on modify statements
         if match_tokens(t, C.COMMA_TOKEN):
-            state = State.IDENTIFIER
+            self.state = ColumnState.IDENTIFIER
             at_end = True
         elif match_tokens(t, C.RPAREN_TOKEN):
-            state = State.CLOSE_PAREN
+            self.state = ColumnState.CLOSE_PAREN
             at_end = True
 
+        print(f"_check_for_end_of_column, token: {t.value}, at_end: {at_end}, is_column: {is_column}")
         if at_end and is_column:
-            on_to_next_column()
+            self._on_to_next_column()
         return at_end
 
-    def on_to_next_column():
-        nonlocal cols, name, datatype, modifiers, state, has_auto_increment, grab_auto_increment_value, auto_increment_value
+    def _on_to_next_column(self):
+        modifier_str = ' '.join(self.modifiers).replace(" = ", "=").replace(" ,", ",")
+        self.cols.append(
+            IM.Column(self.name, self.datatype, modifier_str,
+                      self.has_auto_increment, self.auto_increment_value))
+        self._reset_for_next_column()
 
-        modifier_str = ' '.join(modifiers).replace(" = ", "=").replace(" ,", ",")
-        cols.append(IM.Column(name, datatype, modifier_str, has_auto_increment, auto_increment_value))
-        name = ""
-        datatype = ""
-        modifiers = []
-        state = State.IDENTIFIER
-        has_auto_increment = False
-        grab_auto_increment_value = False
-        auto_increment_value = 0
+    def _on_to_next_index(self):
+        modifier_str = ' '.join(self.modifiers).replace(" = ", "=").replace(" ,", ",")
+        self.cols.append(
+            IM.Column(self.name, self.datatype, modifier_str,
+                      self.has_auto_increment, self.auto_increment_value))
+        self._reset_for_next_column()
 
-    def do_modifiers(t: sql.Token, t_prev: sql.Token | None) -> None:
-        nonlocal state, modifiers, has_auto_increment, grab_auto_increment_value, auto_increment_value
+    def get_result(self):
+        # if len(self.pk_columns) > 0:
+        #     return (self.cols, IM.PrimaryKey(self.name, self.pk_columns))
+        return (self.cols, self.keys)
 
+
+_state_action_list: List[Action] = [
+    # if we wanted to validate the SQL, we'd need a lot more states.
+    # TODO more states and fewer state variables would be a good thing.
+    Action(None, C.SPACE_TOKEN, "_continue_action", None),
+    Action(None, C.NEWLINE_TOKEN, "_newline_special_case", None),
+    Action(ColumnState.OPEN_PAREN, C.LPAREN_TOKEN, None, ColumnState.IDENTIFIER),
+    Action(ColumnState.IDENTIFIER, C.NAME_TOKEN, "_save_name", ColumnState.DATA_TYPE),
+    Action(ColumnState.IDENTIFIER, C.PRIMARY_TOKEN, "_set_primary", ColumnState.KEY),
+    Action(ColumnState.IDENTIFIER, C.UNIQUE_TOKEN, "_set_unique", ColumnState.KEY),
+    Action(ColumnState.IDENTIFIER, C.KEY_TOKEN, None, ColumnState.KEY_COLS_START),
+    # TODO does this happen?
+    Action(ColumnState.IDENTIFIER, C.SEMICOLON_TOKEN, None, ColumnState.CLOSE_PAREN),
+    Action(ColumnState.DATA_TYPE, None, "_accumulate_datatype", ColumnState.POST_DATA_TYPE),
+    Action(ColumnState.POST_DATA_TYPE, C.LPAREN_TOKEN, "_accumulate_datatype", ColumnState.DATA_SIZE),
+    Action(ColumnState.POST_DATA_TYPE, None, "_accumulate_modifiers", ColumnState.MODIFIERS),
+    Action(ColumnState.DATA_SIZE, None, "_accumulate_datatype", None),
+    Action(ColumnState.MODIFIERS, None, "_accumulate_modifiers", None),
+    Action(ColumnState.KEY, C.KEY_TOKEN, "_check_keytype", None),
+    Action(ColumnState.KEY_NAME, C.NAME_TOKEN, "_save_key_name", ColumnState.KEY_COLS_START),
+    Action(ColumnState.KEY_COLS_START, C.LPAREN_TOKEN, None, ColumnState.KEY_COL_NAME),
+    Action(ColumnState.KEY_COL_NAME, C.NAME_TOKEN, "_save_key_col_name", None),
+    Action(ColumnState.KEY_COL_NAME, C.LPAREN_TOKEN, None, ColumnState.KEY_COL_LENGTH),
+    Action(ColumnState.KEY_COL_NAME, C.COMMA_TOKEN, "_save_key_col", None),
+    Action(ColumnState.KEY_COL_NAME, C.RPAREN_TOKEN, "_save_key", ColumnState.KEY_COLS_END),
+    Action(ColumnState.KEY_COL_LENGTH, C.NUMBER_TOKEN, "_save_key_col_length", None),
+    Action(ColumnState.KEY_COL_LENGTH, C.RPAREN_TOKEN, "_save_key_col", ColumnState.KEY_COL_LENGTH_END),
+    Action(ColumnState.KEY_COL_LENGTH_END, C.COMMA_TOKEN, None, ColumnState.KEY_COL_NAME),
+    Action(ColumnState.KEY_COL_LENGTH_END, C.RPAREN_TOKEN, "_save_key", ColumnState.KEY_COLS_END),
+    Action(ColumnState.KEY_COLS_END, C.RPAREN_TOKEN, None, ColumnState.CLOSE_PAREN),
+    Action(ColumnState.CLOSE_PAREN, None, None, None),
+]
+
+    # KEY = 6
+    # KEY_NAME = 7
+    # KEY_COLS_START = 8
+    # KEY_COL_NAME = 9
+    # KEY_COL_LENGTH = 10
+    # KEY_COLS_END = 11
+
+class StateMachine:
+    """State machine for parsing column (and key) definitions"""
+    def __init__(self, state_action_list: List[Action]):
+        self.parser_actions = ParserActions()
+
+        self.state_action_list = state_action_list
+        self.no_state_actions = [a for a in self.state_action_list if a.current_state is None]
+
+        state_names: List[str] = [st.name for st in list(ColumnState)]
+        self.state_dict: Dict[str, Action] = dict.fromkeys(state_names)
+        for a in self.state_action_list:
+            if a.current_state is not None:
+                key = ColumnState(a.current_state).name
+                if self.state_dict[key] is None:
+                    self.state_dict[key] = [a]
+                else:
+                    self.state_dict[key].append(a)
+
+    def parse_tokens(self, tl: sql.TokenList) -> None:
+        tokens = get_flattened_tokens(tl)
+        t_iter = tokens.__iter__()
+        t_prev = None
+        while True:
+            processed = False
+            self.parser_actions.reset_for_next_token()
+            try:
+                t_curr = next(t_iter)
+            except StopIteration:
+                break
+
+            print(f"State: {ColumnState(self.parser_actions.state).name}, token: {repr(t_curr)}")
+            params = ActionParams(self.parser_actions.state, t_prev, t_curr)
+            processed, next_state = self._apply_no_state_actions(params)
+            if not processed:
+                processed, next_state = self._apply_state_actions(params)
+            if not processed:
+                msg = f"Confusion, state: {ColumnState(self.parser_actions.state).name}, token: {repr(t_curr)}"
+                raise DbSyncParseException(msg)
+
+            if next_state is not None:
+                self.parser_actions.state = next_state
+            if self.parser_actions.save_prev:
+                t_prev = t_curr
+
+        return self.parser_actions.get_result()
+
+    def _apply_no_state_actions(self, params: ActionParams) -> Tuple[bool, ColumnState]:
+        for action in self.no_state_actions:
+            if match_tokens(params.t_curr, action.expected_token):
+                next_state = self._call_action_method(action, params)
+                return (True, next_state)
+        return (False, None)
+
+    def _apply_state_actions(self, params: ActionParams) -> Tuple[bool, ColumnState]:
+        if params.state is not None:
+            action_list = self.state_dict[params.state.name]
+            for action in action_list:
+                ###print(f"  Evaluating state: {ColumnState(action.current_state).name}, expected token: {action.expected_token}")
+                if action.expected_token is None or \
+                        match_tokens(params.t_curr, action.expected_token):
+                    next_state = self._call_action_method(action, params)
+                    return (True, next_state)
+        return (False, None)
+
+    def _call_action_method(self, action: Action, params: ActionParams) -> ColumnState | None:
+        if action.action_method is not None:
+            func = getattr(self.parser_actions, action.action_method)
+            next_state = func(params)
+            ###print(f"Called {action.action_method}, which returned: {next_state}")
+            return next_state if next_state is not None else action.next_state
+        return action.next_state
+
+
+class ColumnList:
+    def __init__(self) -> None:
+        self.state_machine = StateMachine(_state_action_list)
+
+    def get_columns(self, tl: sql.TokenList) -> Tuple[List[IM.Column], IM.PrimaryKey]:
+        """ Gets the column definitions for a CREATE TABLE statement """
+        result = self.state_machine.parse_tokens(tl)
+        return result
+
+    def _do_modifiers_og(self, t: sql.Token, t_prev: sql.Token | None) -> None:
         # need to check for auto increment
-        if grab_auto_increment_value and t.ttype == T.Number.Integer:
-            grab_auto_increment_value = False
-            auto_increment_value = int(t.value)
+        if self.grab_auto_increment_value and t.ttype == T.Number.Integer:
+            self.grab_auto_increment_value = False
+            self.auto_increment_value = int(t.value)
 
         if match_tokens(t, C.AUTO_INCREMENT_TOKEN):
-            has_auto_increment = True
-            grab_auto_increment_value = True
+            self.has_auto_increment = True
+            self.grab_auto_increment_value = True
 
         # Special case:
         # AUTO_INCREMENT, AUTO_INCREMENT=1244
@@ -105,73 +338,83 @@ def get_columns(tl: sql.TokenList) -> Tuple[List[IM.Column], IM.PrimaryKey]:
             match_tokens(t_prev, C.AUTO_INCREMENT_TOKEN) \
             and match_tokens(t, C.COMMA_TOKEN)
 
-        if auto_inc_comma or not check_for_end_of_column(t):
-            state = State.MODIFIERS
+        if auto_inc_comma or not self._check_for_end_of_column(t):
+            self.state = ColumnState.MODIFIERS
             if isinstance(t, sql.IdentifierList):
-                modifiers += [x.value for x in get_id_list_tokens(t)]
+                self.modifiers += [x.value for x in get_id_list_tokens(t)]
             else:
-                modifiers.append(t.value)
+                self.modifiers.append(t.value)
 
-    t_prev = None
-    for t in tokens:
-        if t.ttype == T.Whitespace:
-            continue
-        elif t.ttype == T.Newline:
-            # argh, if AUTO_INCREMENT appears at the end of a list of
-            # column modifiers, we assume the comma means there is
-            # more to come, not that we are at the end of a column def.
-            if state == State.MODIFIERS and match_tokens(t_prev, C.COMMA_TOKEN):
-                on_to_next_column()
-            else:
+    def get_columns_og(self, tl: sql.TokenList) -> Tuple[List[IM.Column], IM.PrimaryKey]:
+        """ OG method to get the column definitions for a CREATE TABLE statement """
+
+        tokens = get_flattened_tokens(tl)
+        t_prev = None
+        for t in tokens:
+            self.save_prev = True
+            print(f"State: {ColumnState(self.state).name}, prev, token: {repr(t)}")
+            if t.ttype == T.Whitespace:
                 continue
-        elif state == State.OPEN_PAREN and match_tokens(t, C.LPAREN_TOKEN):
-            state = State.IDENTIFIER
-        elif state == State.IDENTIFIER and t.ttype == T.Name:
-            name = t.value
-            state = State.DATA_TYPE
-        elif state == State.IDENTIFIER and match_tokens(t, C.PRIMARY_TOKEN):
-            state = State.KEY
-        elif state == State.IDENTIFIER and match_tokens(t, C.SEMICOLON_TOKEN):
-            break
-        elif state == State.DATA_TYPE:  # and t.ttype == T.Name:
-            datatype = t.value
-            state = State.POST_DATA_TYPE
-        elif state == State.POST_DATA_TYPE:
-            if match_tokens(t, C.LPAREN_TOKEN):
-                datatype += "("
-                state = State.DATA_SIZE
+            elif t.ttype == T.Newline:
+                # argh, if AUTO_INCREMENT appears at the end of a list of
+                # column modifiers, we assume the comma means there is
+                # more to come, not that we are at the end of a column def.
+                if self.state == ColumnState.MODIFIERS and match_tokens(t_prev, C.COMMA_TOKEN):
+                    # TODO in this case, there will be a trailing comma in the modifier list
+                    print("Saw comma followed by newline - on to next column")
+                    self._on_to_next_column()
+                else:
+                    print("Saw newline")
+                    continue
+            elif self.state == ColumnState.OPEN_PAREN and match_tokens(t, C.LPAREN_TOKEN):
+                self.state = ColumnState.IDENTIFIER
+            elif self.state == ColumnState.IDENTIFIER and t.ttype == T.Name:
+                self.name = t.value
+                self.state = ColumnState.DATA_TYPE
+            elif self.state == ColumnState.IDENTIFIER and match_tokens(t, C.PRIMARY_TOKEN):
+                self.state = ColumnState.KEY
+            elif self.state == ColumnState.IDENTIFIER and match_tokens(t, C.SEMICOLON_TOKEN):
+                break
+            elif self.state == ColumnState.DATA_TYPE:
+                self.datatype = t.value
+                self.state = ColumnState.POST_DATA_TYPE
+            elif self.state == ColumnState.POST_DATA_TYPE:
+                if match_tokens(t, C.LPAREN_TOKEN):
+                    self.datatype += "("
+                    self.state = ColumnState.DATA_SIZE
+                else:
+                    self._do_modifiers(t, t_prev)
+            elif self.state == ColumnState.DATA_SIZE:
+                self.datatype += t.value
+                if match_tokens(t, C.RPAREN_TOKEN):
+                    self.state = ColumnState.MODIFIERS
+            elif self.state == ColumnState.MODIFIERS:
+                self._do_modifiers(t, t_prev)
+            elif self.state == ColumnState.KEY and match_tokens(t, C.KEY_TOKEN):
+                self.state = ColumnState.KEY_COLS_START
+            elif self.state == ColumnState.KEY_COLS_START and match_tokens(t, C.LPAREN_TOKEN):
+                self.state = ColumnState.KEY_COL_NAME
+            elif self.state == ColumnState.KEY_COL_NAME:
+                if match_tokens(t, C.RPAREN_TOKEN):
+                    self.state = ColumnState.KEY_COLS_END
+                elif t.ttype == T.Name:
+                    self.pk_columns.append(t.value)
+            elif self.state == ColumnState.KEY_COLS_END:
+                self._check_for_end_of_column(t, is_column=False)
+            elif self.state == ColumnState.CLOSE_PAREN:
+                break
             else:
-                do_modifiers(t, t_prev)
-        elif state == State.DATA_SIZE:
-            datatype += t.value
-            if match_tokens(t, C.RPAREN_TOKEN):
-                state = State.MODIFIERS
-        elif state == State.MODIFIERS:
-            do_modifiers(t, t_prev)
-        elif state == State.KEY and match_tokens(t, C.KEY_TOKEN):
-            state = State.PK_START
-        elif state == State.PK_START and match_tokens(t, C.LPAREN_TOKEN):
-            state = State.PK_COLS
-        elif state == State.PK_COLS:
-            if match_tokens(t, C.RPAREN_TOKEN):
-                state = State.PK_END
-            elif t.ttype == T.Name:
-                pk_columns.append(t.value)
-        elif state == State.PK_END:
-            check_for_end_of_column(t, is_column=False)
-        elif state == State.CLOSE_PAREN:
-            break
-        else:
-            msg = f"Confusion, state: {State(state).name}, token: {repr(t)}"
-            raise DbSyncParseException(msg)
+                msg = f"Confusion, state: {ColumnState(self.state).name}, token: {repr(t)}"
+                raise DbSyncParseException(msg)
 
-        if state == State.CLOSE_PAREN:
-            break
-        t_prev = t
+            if self.state == ColumnState.CLOSE_PAREN:
+                break
+            if self.save_prev:
+                t_prev = t
 
-    if len(pk_columns) > 0:
-        return (cols, IM.PrimaryKey(name, pk_columns))
-    return (cols, None)
+        if len(self.pk_columns) > 0:
+            return (self.cols, IM.PrimaryKey(self.name, self.pk_columns))
+        return (self.cols, None)
 
 
 def _get_post_table_modifiers(ss: SqlStatement, table: IM.Table) -> None:
@@ -210,7 +453,8 @@ def create_table(ss: SqlStatement) -> IM.Table:
 
         t = ss.get_token()
         if isinstance(t, sql.Parenthesis):
-            cols, pks = get_columns(t)
+            cl = ColumnList()
+            cols, pks = cl.get_columns(t)
             table = IM.Table(name, cols)
             if pks is not None:
                 table.primary_keys = pks.primary_keys
