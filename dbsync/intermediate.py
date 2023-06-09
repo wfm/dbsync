@@ -3,6 +3,7 @@
 import re
 from dataclasses import dataclass, field
 from typing import List
+from typing_extensions import deprecated
 
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.settings import DmlOptions, Settings
@@ -111,28 +112,46 @@ class Table(Intermediate, NameMixin):
         """Returns the number of columns in the table"""
         return len(self.columns)
 
-    @property
-    def primary_keys(self) -> List[str]:
-        """Returns the names of the PK columns"""
-        pk = [key for key in self.keys if key.is_primary]
-        if len(pk) == 1:
-            names = [c.name for c in pk[0].columns]
-            return names
-        raise DbSyncCompareException("Table has no primary key columns")
+    # @property
+    # @deprecated
+    # def primary_keys(self) -> List[str]:
+    #     """Returns the names of the PK columns"""
+    #     pk = [key for key in self.keys if key.is_primary]
+    #     if len(pk) == 1:
+    #         names = [c.name for c in pk[0].columns]
+    #         return names
+    #     raise DbSyncCompareException("Table has no primary key columns")
+
+    def get_primary_key(self) -> Key | None:
+        """Returns the unique key, if any"""
+        keys = [key for key in self.keys if key.is_primary]
+        return self._return_key(keys, "primary")
 
     def get_unique_key(self) -> Key | None:
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_unique]
+        return self._return_key(keys, "unique")
+
+    def get_comparison_key(self) -> Key | None:
+        key = self.get_unique_key()
+        if key is None:
+            key = self.get_primary_key()
+        return key
+
+    def _return_key(self, keys: List[Key], name: str) -> Key | None:
         if len(keys) == 0:
             return None
         elif len(keys) == 1:
             return keys[0]
         else:
-            raise DbSyncCompareException("Table has multiple unique keys - \
+            raise DbSyncCompareException(f"Table has multiple {name} keys - \
                                          I assumed there would be at most 1")
 
     def append_key(self, key: Key) -> None:
         self.keys.append(key)
+
+    def get_column_names(self) -> List[str]:
+        return [c.name for c in self.columns]
 
     def get_column(self, name: str) -> Column:
         """Gets a column by name"""

@@ -19,6 +19,7 @@ TBL_PREFIX = "tbl_"
 # inserts with rows in different order
 # creating a table
 # updates with timestamps
+# unique keys
 
 
 class TestMain:

@@ -48,8 +48,9 @@ DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci"
         col = table.get_column("id")
         assert col.auto_inc, "Table should have auto_increment"
         assert col.auto_inc_val == 10, "Table auto-increment value should be 10"
-        assert len(table.primary_keys) == 1, "Table should have primary key"
-        assert table.primary_keys[0] == "id", "Table primary key should be 'id'"
+        pk = table.get_primary_key()
+        assert pk is not None, "Table should have primary key"
+        assert pk.columns[0].name == "id", "Table primary key should be 'id'"
         assert table.post_definition_modifiers == table_modifiers, "Table should have modifiers"
 
     # TODO add test for:
@@ -76,8 +77,9 @@ DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_520_ci"
 
         self._pretest_setup()
         table = self._get_table(sql)
-        assert len(table.primary_keys) == 1, "Table should have primary key"
-        assert table.primary_keys[0] == "claim_id", "Table primary key should be 'id'"
+        pk = table.get_primary_key()
+        assert pk is not None, "Table should have primary key"
+        assert pk.columns[0].name == "claim_id", "Table primary key should be 'claim_id'"
         assert len(table.keys) == 3, "Table should have 3 keys"
         # Assuming the keys are in the order they occur in the SQL
         assert table.keys[0].name == "", "PK has no name"

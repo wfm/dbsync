@@ -45,14 +45,14 @@ MODIFY_DATA = [
 
 # note: unique index is on 4th column on chars 0..4 (not counting quotes)
 SRC_UNIQ_TEST = [
-    ["01", "'A'", "'B'", "'key 1-src'"],
-    ["02", "'C'", "'D'", "'key 2-src'"]
+    ["03", "'A'", "'B'", "'key 1'"],
+    ["02", "'C'", "'D'", "'key 2'"]
 ]
 LEN_UNIQ_TEST = len(SRC_UNIQ_TEST)
 
 DST_UNIQ_TEST = [
-    ["02", "'C'", "'D'", "'key 2-dst'"],
-    ["03", "'E'", "'F'", "'key 1-dst'"]
+    ["02", "'C'", "'D'", "'key 2'"],
+    ["01", "'E'", "'F'", "'key 1'"]
 ]
 
 

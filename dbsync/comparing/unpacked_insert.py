@@ -11,11 +11,11 @@ from dbsync.exceptions import DbSyncCompareException
 @dataclass
 class InsertRecord:
     """Data needed to generate insert and update statements for a table"""
-    key: List[str]  # of strings
-    insert_vals: Dict[str, str] | None
-    key_vals: Dict[str, str]
-    update_vals: List[str]
-    unique_vals: Dict[str, str] | None
+    key: List[str]                          # values of (unique|primary) keys
+    insert_vals: Dict[str, str] | None      # key,value pairs of all columns
+    key_vals: Dict[str, str]                # key,value pairs of (unique|primary) keys
+    update_vals: List[str]                  # key,value pairs of non-key (unique|primary) columns
+    # unique_vals: Dict[str, str] | None    # key,value pairs of unique key - still need?
     msg: str = field(default="")
 
 
@@ -27,24 +27,18 @@ class UnpackedInsert:
         self.columns = insert.columns
         self.values = self._unpack(insert.values)
 
-        self.primary_keys = table.primary_keys
-        if len(self.primary_keys) == 0:
-            self._key_getter = None
-        else:
-            self._key_getter = itemgetter(*self.primary_keys)
+        self.comparison_key = table.get_comparison_key()
+        if self.comparison_key is None:
+            raise DbSyncCompareException("Table has no keys")
 
-        self.nonkeys = [x for x in self.columns if x not in self.primary_keys]
-        if len(self.nonkeys) == 0:
+        self.key_column_names = self.comparison_key.get_column_names()
+        self._key_getter = itemgetter(*self.key_column_names)
+
+        self.nonkey_column_names = [x for x in self.columns if x not in self.key_column_names]
+        if len(self.nonkey_column_names) == 0:
             self._nonkey_getter = None
         else:
-            self._nonkey_getter = itemgetter(*self.nonkeys)
-
-        self.uniq2key = None
-        self.unique_key = table.get_unique_key()
-        self.has_unique_key = self.unique_key is not None
-        if self.has_unique_key:
-            self.unique_cols = self.unique_key.get_column_names()
-            self._unique_key_getter = itemgetter(*self.unique_cols)
+            self._nonkey_getter = itemgetter(*self.nonkey_column_names)
 
     def __str__(self):
         return f"UnpackedInsert for {self.name}"
@@ -52,14 +46,9 @@ class UnpackedInsert:
     def __repr__(self):
         return f"""{self.__str__()}
     columns: {self.columns}
-        PKs: {self.primary_keys}
-   non-keys: {self.nonkeys}
-     unique: {self.unique_cols if self.has_unique_key else "n/a"}
+       keys: {self.key_column_names}
+   non-keys: {self.nonkey_column_names}
      values: {self.values}"""
-
-    @classmethod
-    def by_columns(cls, item):
-        return itemgetter(item.columns)
 
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
@@ -92,12 +81,14 @@ class UnpackedInsert:
                 value += value[0]
         return value
 
-    def get_unique_vals(self, values):
-        if self.has_unique_key:
-            unique_vals = self.apply_getter(values, self._unique_key_getter)
-            return [self._limit_value_len(*pair) for pair \
-                    in zip(unique_vals, self.unique_key.get_column_lengths(), strict=True)]
-        return None
+    # come back to this - we need to trim the keys with lengths for
+    # comparison but use the full key for updating (i think)
+    # def get_unique_vals(self, values):
+    #     if self.has_unique_key:
+    #         unique_vals = self.apply_getter(values, self._unique_key_getter)
+    #         return [self._limit_value_len(*pair) for pair
+    #                 in zip(unique_vals, self.unique_key.get_column_lengths(), strict=True)]
+    #     return None
 
     def append(self, insert: IM.Insert) -> None:
         if insert.columns != self.columns:
@@ -131,7 +122,7 @@ class UnpackedInsert:
             self.values.sort(key=self._key_getter)
         except KeyError as ke:
             print(f"KeyError on table {self.name}")
-            print(f"  keys are: {self.primary_keys}")
+            print(f"  keys are: {self.key_column_names}")
             print("  Offending data:")
             for v in self.values:
                 try:
@@ -155,37 +146,11 @@ class UnpackedInsert:
         self.values = filtered
 
     def _get_key_values_dict(self, vals: List[str]) -> Dict[str, str]:
-        return dict(zip(self.primary_keys, vals, strict=True))
+        return dict(zip(self.key_column_names, vals, strict=True))
 
     def _get_nonkey_values_dict(self, v: Dict[str, str]) -> Dict[str, str]:
         nonkey_vals = self.get_non_key(v)
-        return dict(zip(self.nonkeys, nonkey_vals, strict=True))
-
-    def tuplify(self, x):
-        if x is None:
-            return None
-        elif not isinstance(x, list) or len(x) == 0:
-            raise DbSyncCompareException(f"Bad data in tuplify: \"{x}\"")
-        elif len(x) == 1:
-            return x[0]
-        else:
-            return tuple(x)
-
-    def appears_later(self, src_item: InsertRecord) -> bool:
-        if self.has_unique_key:
-            if self.uniq2key is None:
-                self._get_unique_column_key_lookup()
-            key = self.uniq2key.get(src_item.unique_vals)
-            result = key is not None and key > src_item.key
-            return result
-        return False
-
-    def _get_unique_column_key_lookup(self) -> None:
-        if self.has_unique_key and self.uniq2key is None:
-            unique_list = [self.tuplify(self.get_unique_vals(v)) for v in self.values]
-            key_list = [self.get_key(v) for v in self.values]
-            self.uniq2key = dict(zip(unique_list, key_list, strict=True))
-        return None
+        return dict(zip(self.nonkey_column_names, nonkey_vals, strict=True))
 
     # TODO maybe use __iter__ ????
     def values_gen(self) -> Iterator[InsertRecord]:
@@ -194,5 +159,4 @@ class UnpackedInsert:
             key = self.get_key(v)
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
-            uniq = self.tuplify(self.get_unique_vals(v))
-            yield InsertRecord(key, v, kv, upd, uniq)
+            yield InsertRecord(key, v, kv, upd)

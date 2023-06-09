@@ -349,9 +349,6 @@ def create_table(ss: SqlStatement) -> IM.Table:
             cl = ColumnList()
             cols, pks = cl.get_columns(t)
             table = IM.Table(name, cols, keys=pks)
-            # if pks is not None:
-            #     table.primary_keys = pks.primary_keys
-
             _get_post_table_modifiers(ss, table)
             return table
     raise DbSyncParseException("Invalid CREATE TABLE statement")

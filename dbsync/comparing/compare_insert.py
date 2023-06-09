@@ -33,7 +33,6 @@ class InsertDiffs:
     def _join_lines(self, sql: List[str]) -> str:
         return "\n".join(sql)
 
-    # TODO do we need backticks on the column names?
     def _generate_insert(self) -> List[str]:
         add_len = len(self.additions)
         if (add_len == 0):
@@ -132,8 +131,6 @@ class CompareInsert:
 
         add: List[Dict[str, str]] = []
         update: List[InsertRecord] = []
-        would_have_updated = False
-        potential_updates = 0
 
         src_item = srcgen.get_next_item()
         if dstgen is None or not dstgen.is_open:
@@ -142,16 +139,10 @@ class CompareInsert:
             dst_item = dstgen.get_next_item()
 
         while srcgen.is_open:
-            if dstgen is None or not dstgen.is_open:
+            if dstgen is None or not dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
-                add.append(src_item.insert_vals)
-                src_item = srcgen.get_next_item()
-            elif src_item.key < dst_item.key:
                 # if src key < dst key, insert this record into dst
-                # unless there is a dst record with a greater key and the same 
-                # unique columns
-                if not dst.appears_later(src_item):
-                    add.append(src_item.insert_vals)
+                add.append(src_item.insert_vals)
                 src_item = srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
@@ -165,9 +156,8 @@ class CompareInsert:
                 # what should we do here? if the src record is newer,
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything.
-                do_update, upd_msg, whu = cls._get_time_info(src_item, dst_item, dst_table)
-                not_later = not dst.appears_later(src_item)
-                if do_update and not_later:
+                do_update = cls._get_time_info(src_item, dst_item, dst_table)
+                if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
                     update_vals = cls._update_only_necessary_cols(src_item, dst_item)
                     update.append(
@@ -175,33 +165,22 @@ class CompareInsert:
                             src_item.key,
                             None,
                             src_item.key_vals,
-                            update_vals,
-                            upd_msg))
-                elif whu:
-                    would_have_updated = True
-                    potential_updates += 1
+                            update_vals))
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
 
-        tbl_msg = ""
-        if would_have_updated:
-            tbl_msg = f"*** {potential_updates} records would have been updated, \
-but the table has no timestamp column ***"
-        return InsertDiffs(dst_table, add, update, tbl_msg)
+        return InsertDiffs(dst_table, add, update)
 
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
     @classmethod
-    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table):
-        msg = ""
+    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table) -> bool:
         do_update = False
-        would_have_updated = False
         if table.timestamp_columns is None or \
                 len(table.timestamp_columns) == 0:
             # not certain whether to update or not to update
             do_update = Settings.obj().should_update_table(table.name)
-            would_have_updated = True
         else:
             src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
             dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
@@ -210,11 +189,10 @@ but the table has no timestamp column ***"
                 dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
                 do_update = src >= dst  # TODO is it ok to compare strings here?
-                msg = f"{src} >= {dst} => {do_update}"
             except StopIteration:
                 print("*** Time comparison raised StopIteration ***")
 
-        return (do_update, msg, would_have_updated)
+        return do_update
 
     @classmethod
     def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):

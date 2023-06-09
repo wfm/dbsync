@@ -97,10 +97,11 @@ WHERE `f1`=17 AND `f2`='i';"""
             )
         ],
         "test_unique": [
+            # keys are same length as index
             dict(expected_sql="""-- Updating 1 record:
 UPDATE `NhU_test_table`
-SET `f4`='key 2-src'
-WHERE `f1`=02 AND `f2`='C';""")
+SET `f1`=03, `f2`='A', `f3`='B'
+WHERE `f4`='key 1';""")
         ]
     }
 
