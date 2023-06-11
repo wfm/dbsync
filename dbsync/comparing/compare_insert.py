@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert, InsertRecord
@@ -113,6 +113,7 @@ class CompareInsert:
     lists of data to be inserted and updated in the dst table
     to make it equivalent to the src table.
     """
+
     @classmethod
     def compare(
             cls,
@@ -138,17 +139,52 @@ class CompareInsert:
         else:
             dst_item = dstgen.get_next_item()
 
+        # temporary:
+        print(f"Table {dst_table.name} - Timestamp? ({Settings.obj().table_has_timestamp(dst_table.name)}):")
+
+        def get_item_str(item: InsertRecord, side: str, ts: str) -> str:
+            if item is None:
+                msg = f"{side} - None"
+            else:
+                msg = f"{side} - key: {item.key}"
+                if item.is_unique:
+                    msg += ", pk: {item.pk}"
+            if len(ts) > 0:
+                msg += ", ts: {ts}"
+            return msg
+
+        def print_comparison(
+                src: InsertRecord,
+                dst: InsertRecord,
+                action: str,
+                src_ts: str = "",
+                dst_ts: str = "") -> None:
+            compare_str = "n/a"
+            if dst is not None:
+                if src.key == dst.key:
+                    compare_str = "="
+                elif src.key < dst.key:
+                    compare_str = "<"
+                else:
+                    compare_str = ">"
+            src_str = get_item_str(src, 'src', src_ts)
+            dst_str = get_item_str(dst, 'dst', dst_ts)
+            print(f"{action}: {src_str} {compare_str} {dst_str}")
+
         while srcgen.is_open:
             if dstgen is None or not dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
+                print_comparison(src_item, dst_item, "Insert src into dst")    # temporary
                 add.append(src_item.insert_vals)
                 src_item = srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
+                print_comparison(src_item, dst_item, "skipping dst")    # temporary
                 dst_item = dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
+                print_comparison(src_item, dst_item, "skipping both")    # temporary
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
             else:
@@ -156,7 +192,7 @@ class CompareInsert:
                 # what should we do here? if the src record is newer,
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything.
-                do_update = cls._get_time_info(src_item, dst_item, dst_table)
+                (do_update, msg, src_ts, dst_ts) = cls._get_time_info(src_item, dst_item, dst_table)
                 if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
                     update_vals = cls._update_only_necessary_cols(src_item, dst_item)
@@ -165,7 +201,12 @@ class CompareInsert:
                             src_item.key,
                             None,
                             src_item.key_vals,
-                            update_vals))
+                            update_vals,
+                            src_item.pk, src_item.is_unique,
+                            msg))
+
+                msg = ("" if do_update else "NOT ") + "doing update of dst"
+                print_comparison(src_item, dst_item, msg, src_ts, dst_ts)    # temporary
 
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
@@ -175,12 +216,16 @@ class CompareInsert:
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
     @classmethod
-    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table) -> bool:
+    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table) -> Tuple[bool, str, str, str]:
         do_update = False
+        msg = ""
+        src = ""
+        dst = ""
         if table.timestamp_columns is None or \
                 len(table.timestamp_columns) == 0:
             # not certain whether to update or not to update
             do_update = Settings.obj().should_update_table(table.name)
+            msg = "+++ Update of table without a timestamp column"
         else:
             src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
             dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
@@ -192,7 +237,7 @@ class CompareInsert:
             except StopIteration:
                 print("*** Time comparison raised StopIteration ***")
 
-        return do_update
+        return (do_update, msg, src, dst)
 
     @classmethod
     def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):

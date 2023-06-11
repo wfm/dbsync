@@ -44,62 +44,9 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     dst_prefix: str = "staging_"
     tbl_prefix: str = "NhU_"
     included_tables: List[str] = []
-    save_included_tables: List[str] = [
-        "options",
-        "users",
-        "usermeta",
-        "posts",
-        "postmeta",
-        "terms",
-        "term_relationships",
-        "term_taxonomy",
-        "comments",
-        "commentmeta",
-        "links",
-        "ce4wp_abandoned_checkout",
-        "ce4wp_contacts",
-        "sib_model_forms",
-        "sib_model_users",
-        "tec_events",
-        "tec_occurrences",
-        "wc_admin_notes",
-        "wc_admin_note_actions",
-        "wc_category_lookup",
-        "wc_customer_lookup",
-        "wc_download_log",
-        "wc_order_coupon_lookup",
-        "wc_order_product_lookup",
-        "wc_order_stats",
-        "wc_order_tax_lookup",
-        "wc_product_attributes_lookup",
-        "wc_product_download_directories",
-        "wc_product_meta_lookup",
-        "wc_rate_limits",
-        "wc_reserved_stock",
-        "wc_tax_rate_classes",
-        "wc_webhooks",
-        "woocommerce_api_keys",
-        "woocommerce_attribute_taxonomies",
-        "woocommerce_downloadable_product_permissions",
-        "woocommerce_log",
-        "woocommerce_order_itemmeta",
-        "woocommerce_order_items",
-        "woocommerce_payment_tokenmeta",
-        "woocommerce_payment_tokens",
-        "woocommerce_sessions",
-        "woocommerce_shipping_zones",
-        "woocommerce_shipping_zone_locations",
-        "woocommerce_shipping_zone_methods",
-        "woocommerce_tax_rates",
-        "woocommerce_tax_rate_locations",
-        "wpforms_tasks_meta",
-        "yoast_indexable",
-        "yoast_indexable_hierarchy",
-        "yoast_migrations",
-        "yoast_primary_term",
-        "yoast_seo_links"
+    excluded_tables: List[str] = [
+        "options"
     ]
-    excluded_tables: List[str] = []
 
     timestamp_cols: Dict[str, List[str]] = {
         "actionscheduler_actions": ["scheduled_date_gmt"],
@@ -173,7 +120,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         if m:
             return m.group(2)
 
-        print("="*20)
+        print("=" * 20)
         print(repr(self._table_name_regex))
         print(repr(m))
         msg = f"Doesn't follow table name conventions: {table_name}"
@@ -189,6 +136,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             base_name in self.included_tables
         exclude = base_name in self.excluded_tables
         return include and not exclude
+
+    def table_has_timestamp(self, table_name: str) -> bool:
+        base_name = self.get_base_table_name(table_name)
+        return self.update_specific_tables_without_timestamp.get(base_name, False)
 
     def should_update_table(self, table_name: str) -> bool:
         base_name = self.get_base_table_name(table_name)

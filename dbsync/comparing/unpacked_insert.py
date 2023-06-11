@@ -1,6 +1,6 @@
 """An easier-to-work-with representation of an insert statement"""
 
-from typing import List, Dict, Iterator, Tuple
+from typing import List, Dict, Iterator
 from operator import itemgetter
 from dataclasses import dataclass, field
 
@@ -15,7 +15,8 @@ class InsertRecord:
     insert_vals: Dict[str, str] | None      # key,value pairs of all columns
     key_vals: Dict[str, str]                # key,value pairs of (unique|primary) keys
     update_vals: List[str]                  # key,value pairs of non-key (unique|primary) columns
-    # unique_vals: Dict[str, str] | None    # key,value pairs of unique key - still need?
+    pk: List[str]                           # temporary
+    is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
 
 
@@ -28,11 +29,17 @@ class UnpackedInsert:
         self.values = self._unpack(insert.values)
 
         self.comparison_key = table.get_comparison_key()
+        self.is_unique = self.comparison_key.is_unique
         if self.comparison_key is None:
             raise DbSyncCompareException("Table has no keys")
 
         self.key_column_names = self.comparison_key.get_column_names()
         self._key_getter = itemgetter(*self.key_column_names)
+
+        # temporary"
+        pk = table.get_primary_key()
+        pk_cols = pk.get_column_names()
+        self._pk_getter = itemgetter(*pk_cols)
 
         self.nonkey_column_names = [x for x in self.columns if x not in self.key_column_names]
         if len(self.nonkey_column_names) == 0:
@@ -159,4 +166,6 @@ class UnpackedInsert:
             key = self.get_key(v)
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
-            yield InsertRecord(key, v, kv, upd)
+            # temporary
+            pk = self.apply_getter(v, self._pk_getter)
+            yield InsertRecord(key, v, kv, upd, pk, self.is_unique)

@@ -38,6 +38,12 @@ def get_args():
         help="Info to add to timestamp columns, e.g. tbl=col1,col2;tbl2=col3",
         default="")
     argparser.add_argument(
+        "-hw", "--highwater",
+        help="Also writes high water mark file",
+        default=False,
+        action="store_true"
+    )
+    argparser.add_argument(
         "-o", "--output",
         help="The filename for the SQL output",
         default=settings.output_file)
@@ -67,16 +73,16 @@ def get_args():
         print("  database    :", args.database)
         print("  table prefix:", args.table_prefix)
         print("  output file :", args.output)
-    return (args.filename, args.quiet)
+    return (args.filename, args.quiet, args.highwater)
 
 
 def main():
-    filename, quiet = get_args()
-    do_comparison(filename, quiet)
+    filename, quiet, highwater = get_args()
+    do_comparison(filename, quiet, highwater)
     return 0
 
 
-def do_comparison(filename: str, quiet=True) -> None:
+def do_comparison(filename: str, quiet=True, highwater=False) -> None:
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
@@ -88,6 +94,8 @@ def do_comparison(filename: str, quiet=True) -> None:
     c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
     c.compare()
     time4 = time.time()
+    if highwater:
+        c.write_high_water_marks()
 
     if not quiet:
         print("Timing:")
