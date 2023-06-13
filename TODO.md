@@ -111,3 +111,11 @@ Better idea: sort by unique key
             key_list = [self.get_key(v) for v in self.values]
             self.uniq2key = dict(zip(unique_list, key_list, strict=True))
         return None
+
+Tables without timestamps that need updating
+staging_NhU_postmeta
+staging_NhU_termmeta
+staging_NhU_term_taxonomy
+staging_NhU_usermeta
+staging_NhU_wc_product_meta_lookup
+staging_NhU_woocommerce_sessions

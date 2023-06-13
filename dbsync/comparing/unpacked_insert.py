@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from dbsync import intermediate as IM
 from dbsync.exceptions import DbSyncCompareException
+from dbsync.settings import Settings
 
 
 @dataclass
@@ -34,12 +35,26 @@ class UnpackedInsert:
             raise DbSyncCompareException("Table has no keys")
 
         self.key_column_names = self.comparison_key.get_column_names()
-        self._key_getter = itemgetter(*self.key_column_names)
+        self._key_numeric_cols = []
+        for name in self.key_column_names:
+            datatype = table.get_column(name).datatype
+            if Settings.obj().is_integer_datatype(datatype):
+                t = "i"
+            elif Settings.obj().is_numeric_datatype(datatype):
+                t = "f"
+            else:
+                t = "-"
+            self._key_numeric_cols.append(t)
 
-        # temporary"
+        self._key_getter = itemgetter(*self.key_column_names)
+        # print(f"Key numeric info: {', '.join(self.key_column_names)} \
+        #       {''.join(str(self._key_numeric_cols))} \
+        #       ({', '.join([str(isinstance(v, float)) for v in self.get_key(self.values[0])])})")
+
+        # temporary
         pk = table.get_primary_key()
-        pk_cols = pk.get_column_names()
-        self._pk_getter = itemgetter(*pk_cols)
+        self.pk_cols = pk.get_column_names()
+        self._pk_getter = itemgetter(*self.pk_cols)
 
         self.nonkey_column_names = [x for x in self.columns if x not in self.key_column_names]
         if len(self.nonkey_column_names) == 0:
@@ -73,7 +88,19 @@ class UnpackedInsert:
         return [result]
 
     def get_key(self, values):
-        return self.apply_getter(values, self._key_getter)
+        key_items = self.apply_getter(values, self._key_getter)
+        key = []
+        for indicator, str_value in zip(self._key_numeric_cols, key_items):
+            if str_value.casefold() == "null":
+                val = float("nan")
+            elif indicator == "i":
+                val = int(str_value)
+            elif indicator == "f":
+                val = float(str_value)
+            else:
+                val = str_value
+            key.append(val)
+        return key
 
     def get_non_key(self, values):
         return self.apply_getter(values, self._nonkey_getter)
@@ -113,27 +140,20 @@ class UnpackedInsert:
 
     def dedup(self) -> None:
         """Sort and removed duplicates"""
-        #
-        # TODO re sorting
-        # The sort will use the collating sequence for strings
-        # so numeric columns won't be in numeric order. I'm
-        # not sure this is a bad thing.
-        # Alternatives:
-        # 1. Be smart about the datatype - hard and error prone
-        # 2. Wrap the data with the original order and unsort at the end
         if (len(self.values) < 2):
             return
 
         filtered = []
         try:
-            self.values.sort(key=self._key_getter)
+            ### self.values.sort(key=self._key_getter)
+            self.values.sort(key=self.get_key)
         except KeyError as ke:
             print(f"KeyError on table {self.name}")
             print(f"  keys are: {self.key_column_names}")
             print("  Offending data:")
             for v in self.values:
                 try:
-                    _ = self._key_getter(v)
+                    _ = self.get_key(v)
                 except Exception:
                     print(repr(v))
                     break

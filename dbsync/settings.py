@@ -45,7 +45,11 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     tbl_prefix: str = "NhU_"
     included_tables: List[str] = []
     excluded_tables: List[str] = [
-        "options"
+        # "actionscheduler_actions",
+        # "actionscheduler_claims",
+        # "NhU_actionscheduler_groups",
+        # "actionscheduler_logs",
+        # "options"
     ]
 
     timestamp_cols: Dict[str, List[str]] = {
@@ -84,15 +88,85 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "yoast_primary_term": ["updated_at", "created_at"]
     }
 
+    # idea: use the auto_inc values from the time the
+    # stage site was created as a guide.
+    # Data is from 3/24/23
+    high_water_marks = {
+        'NhU_actionscheduler_groups': 9,
+        'NhU_ce4wp_abandoned_checkout': 0,
+        'NhU_ce4wp_contacts': 0,
+        'NhU_commentmeta': 0,
+        'NhU_comments': 14,
+        'NhU_e_events': 0,
+        'NhU_links': 0,
+        'NhU_postmeta': 7359,
+        'NhU_posts': 1434,
+        'NhU_sib_model_forms': 2,
+        'NhU_sib_model_users': 0,
+        'NhU_tec_events': 5,
+        'NhU_tec_occurrences': 5,
+        'NhU_termmeta': 18,
+        'NhU_terms': 47,
+        'NhU_term_relationships': -1,
+        'NhU_term_taxonomy': 47,
+        'NhU_usermeta': 199,
+        'NhU_users': 3,
+        'NhU_wc_admin_notes': 51,
+        'NhU_wc_admin_note_actions': 2278,
+        'NhU_wc_category_lookup': -1,
+        'NhU_wc_customer_lookup': 2,
+        'NhU_wc_download_log': 0,
+        'NhU_wc_order_coupon_lookup': -1,
+        'NhU_wc_order_product_lookup': -1,
+        'NhU_wc_order_stats': -1,
+        'NhU_wc_order_tax_lookup': -1,
+        'NhU_wc_product_attributes_lookup': -1,
+        'NhU_wc_product_download_directories': 3,
+        'NhU_wc_product_meta_lookup': -1,
+        'NhU_wc_rate_limits': 0,
+        'NhU_wc_reserved_stock': -1,
+        'NhU_wc_tax_rate_classes': 0,
+        'NhU_wc_webhooks': 0,
+        'NhU_woocommerce_api_keys': 0,
+        'NhU_woocommerce_attribute_taxonomies': 2,
+        'NhU_woocommerce_downloadable_product_permissions': 0,
+        'NhU_woocommerce_log': 0,
+        'NhU_woocommerce_order_itemmeta': 44,
+        'NhU_woocommerce_order_items': 7,
+        'NhU_woocommerce_payment_tokenmeta': 0,
+        'NhU_woocommerce_payment_tokens': 0,
+        'NhU_woocommerce_sessions': 567,
+        'NhU_woocommerce_shipping_zones': 3,
+        'NhU_woocommerce_shipping_zone_locations': 12,
+        'NhU_woocommerce_shipping_zone_methods': 6,
+        'NhU_woocommerce_tax_rates': 2,
+        'NhU_woocommerce_tax_rate_locations': 3,
+        'NhU_wpforms_tasks_meta': 23,
+        'NhU_wpmailsmtp_debug_events': 3,
+        'NhU_wpmailsmtp_tasks_meta': 0,
+        'NhU_yoast_indexable': 416,
+        'NhU_yoast_indexable_hierarchy': -1,
+        'NhU_yoast_migrations': 24,
+        'NhU_yoast_primary_term': 8,
+        'NhU_yoast_seo_links': 2190
+    }
+
     # Controls what happens when data for a pair of
     # tables differ, but the tables don't have
     # a timestamp column
-    update_tables_without_timestamp: bool = True
+    update_tables_without_timestamp: bool = False
 
     # Override the above
     update_specific_tables_without_timestamp: Dict[str, bool] = {
         "options": False
     }
+
+    integer_types = [
+        "INTEGER", "INT", "SMALLINT", "TINYINT", "MEDIUMINT", "BIGINT"
+    ]
+    numeric_types = [
+        "DECIMAL", "NUMERIC", "FLOAT", "DOUBLE", "REAL", "DEC", "FIXED",
+    ]
 
     # filename for generated sql, or None for stdout
     output_file: str | None = "output.sql"
@@ -105,6 +179,8 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     dml_options: DmlOptions = DmlOptions.GENERATE_LOCK_TABLES
 
     _table_name_regex: re = PrivateAttr()
+    _integer_types_regex: re = PrivateAttr()
+    _numeric_types_regex: re = PrivateAttr()
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -113,6 +189,16 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     def init(self):
         pattern = f"^`?({self.src_prefix}|{self.dst_prefix}){self.tbl_prefix}(.+?)`?$"
         self._table_name_regex = re.compile(pattern, flags=re.IGNORECASE)
+        self._integer_types_regex = \
+            re.compile(f"^({'|'.join(self.integer_types)})", flags=re.IGNORECASE)
+        self._numeric_types_regex = \
+            re.compile(f"^({'|'.join(self.numeric_types)})", flags=re.IGNORECASE)
+
+    def is_integer_datatype(self, datatype):
+        return self._integer_types_regex.search(datatype) is not None
+
+    def is_numeric_datatype(self, datatype):
+        return self._numeric_types_regex.search(datatype) is not None
 
     def get_base_table_name(self, table_name: str) -> str | None:
         """Strips the prefixes from the table name"""
@@ -125,6 +211,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         print(repr(m))
         msg = f"Doesn't follow table name conventions: {table_name}"
         raise DbSyncParseException(msg)
+
+    def get_src_table_name(self, table_name: str) -> str:
+        base_name = self.get_base_table_name(table_name)
+        return f"{self.src_prefix}{self.tbl_prefix}{base_name}"
 
     def should_include_table(self, table_name):
         """
@@ -139,7 +229,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
     def table_has_timestamp(self, table_name: str) -> bool:
         base_name = self.get_base_table_name(table_name)
-        return self.update_specific_tables_without_timestamp.get(base_name, False)
+        return base_name in self.timestamp_cols
 
     def should_update_table(self, table_name: str) -> bool:
         base_name = self.get_base_table_name(table_name)
@@ -158,6 +248,16 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         if base_name in self.timestamp_cols:
             return self.timestamp_cols[base_name]
         return []
+
+    def get_high_water(self, table_name) -> int:
+        """
+        Returns the auto_inc value from an earlier backup
+        of the database. Returns -1 if there
+        is no information.
+        """
+        if table_name in self.high_water_marks:
+            return self.high_water_marks[table_name]
+        return -1
 
     @classmethod
     def obj(cls, initial_settings=None):

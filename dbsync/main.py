@@ -6,6 +6,7 @@ import sqlparse
 from dbsync.settings import Settings
 from dbsync.parsing.statement_processor import process_statements
 from dbsync.comparing.comparison import Comparison
+from dbsync.parsing.splitter import Splitter
 
 
 #
@@ -44,6 +45,12 @@ def get_args():
         action="store_true"
     )
     argparser.add_argument(
+        "--split",
+        help="Split sql into separate files for src and dst",
+        default=False,
+        action="store_true"
+    )
+    argparser.add_argument(
         "-o", "--output",
         help="The filename for the SQL output",
         default=settings.output_file)
@@ -73,12 +80,15 @@ def get_args():
         print("  database    :", args.database)
         print("  table prefix:", args.table_prefix)
         print("  output file :", args.output)
-    return (args.filename, args.quiet, args.highwater)
+    return (args.filename, args.quiet, args.highwater, args.split)
 
 
 def main():
-    filename, quiet, highwater = get_args()
-    do_comparison(filename, quiet, highwater)
+    filename, quiet, highwater, split = get_args()
+    if split:
+        do_split(filename)
+    else:
+        do_comparison(filename, quiet, highwater)
     return 0
 
 
@@ -92,10 +102,11 @@ def do_comparison(filename: str, quiet=True, highwater=False) -> None:
     repo.post_process()
     time3 = time.time()
     c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
-    c.compare()
-    time4 = time.time()
     if highwater:
         c.write_high_water_marks()
+    else:
+        c.compare()
+    time4 = time.time()
 
     if not quiet:
         print("Timing:")
@@ -104,3 +115,10 @@ def do_comparison(filename: str, quiet=True, highwater=False) -> None:
         print("  Post-Processing     : %.2f" % (time3 - time2))
         print("  Compare and output  : %.2f" % (time4 - time3))
         print("  Total               : %.2f" % (time4 - time0))
+
+
+def do_split(filename: str) -> None:
+    with open(filename, "r", encoding="utf8") as f:
+        text_l = sqlparse.split(f.read())
+    split = Splitter()
+    split.separate_statements(text_l)

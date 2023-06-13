@@ -3,7 +3,6 @@
 import re
 from dataclasses import dataclass, field
 from typing import List
-from typing_extensions import deprecated
 
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.settings import DmlOptions, Settings
