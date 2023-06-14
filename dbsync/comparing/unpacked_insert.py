@@ -47,11 +47,8 @@ class UnpackedInsert:
             self._key_numeric_cols.append(t)
 
         self._key_getter = itemgetter(*self.key_column_names)
-        # print(f"Key numeric info: {', '.join(self.key_column_names)} \
-        #       {''.join(str(self._key_numeric_cols))} \
-        #       ({', '.join([str(isinstance(v, float)) for v in self.get_key(self.values[0])])})")
 
-        # temporary
+        # TODO temporary (or is it?)
         pk = table.get_primary_key()
         self.pk_cols = pk.get_column_names()
         self._pk_getter = itemgetter(*self.pk_cols)
@@ -115,15 +112,6 @@ class UnpackedInsert:
                 value += value[0]
         return value
 
-    # come back to this - we need to trim the keys with lengths for
-    # comparison but use the full key for updating (i think)
-    # def get_unique_vals(self, values):
-    #     if self.has_unique_key:
-    #         unique_vals = self.apply_getter(values, self._unique_key_getter)
-    #         return [self._limit_value_len(*pair) for pair
-    #                 in zip(unique_vals, self.unique_key.get_column_lengths(), strict=True)]
-    #     return None
-
     def append(self, insert: IM.Insert) -> None:
         if insert.columns != self.columns:
             msg = f"Tried to append different shaped Inserts, table {self.name}"
@@ -145,7 +133,6 @@ class UnpackedInsert:
 
         filtered = []
         try:
-            ### self.values.sort(key=self._key_getter)
             self.values.sort(key=self.get_key)
         except KeyError as ke:
             print(f"KeyError on table {self.name}")

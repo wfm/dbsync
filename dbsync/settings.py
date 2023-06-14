@@ -1,5 +1,6 @@
 """Configuration-related stuffs"""
 
+from dataclasses import dataclass, field
 import re
 from typing import Dict, List, Any
 from pydantic import BaseModel, PrivateAttr
@@ -23,6 +24,23 @@ class DmlOptions(Enum):
     GENERATE_LOCK_TABLES = 2    # lock tables, disable keys, set auto-inc value
 
 
+class SyncActions(Enum):
+    DEFAULT = 0
+    SKIP = 1
+    COPY = 2
+    MERGE = 3
+
+
+# TODO Switch to this?
+@dataclass
+class TableOptions:
+    action: SyncActions
+    timestamp_cols: List[str] | None
+    update_without_timestamp: bool | None
+    highwater_mark: int
+    synthetic_unique_key: List[str] = field(default_factory=list)
+
+
 class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     #
     # In Bluehost's staging scheme, the prod tables
@@ -44,13 +62,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     dst_prefix: str = "staging_"
     tbl_prefix: str = "NhU_"
     included_tables: List[str] = []
-    excluded_tables: List[str] = [
-        # "actionscheduler_actions",
-        # "actionscheduler_claims",
-        # "NhU_actionscheduler_groups",
-        # "actionscheduler_logs",
-        # "options"
-    ]
+    excluded_tables: List[str] = []
 
     timestamp_cols: Dict[str, List[str]] = {
         "actionscheduler_actions": ["scheduled_date_gmt"],
@@ -90,6 +102,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
     # idea: use the auto_inc values from the time the
     # stage site was created as a guide.
+    # I must not be using this data right.
     # Data is from 3/24/23
     high_water_marks = {
         'NhU_actionscheduler_groups': 9,
@@ -151,15 +164,94 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         'NhU_yoast_seo_links': 2190
     }
 
+    table_options = {
+        "actionscheduler_actions": {"action": SyncActions.COPY},
+        "actionscheduler_claims": {"action": SyncActions.MERGE},
+        "actionscheduler_groups": {"action": SyncActions.MERGE},
+        "actionscheduler_logs": {"action": SyncActions.COPY},
+        "ce4wp_abandoned_checkout": {"action": SyncActions.MERGE},
+        "ce4wp_contacts": {"action": SyncActions.MERGE},
+        "commentmeta": {"action": SyncActions.MERGE},
+        "comments": {"action": SyncActions.COPY},
+        "e_events": {"action": SyncActions.MERGE},
+        "links": {"action": SyncActions.MERGE},
+        "lockdowns": {"action": SyncActions.MERGE},
+        "login_fails": {"action": SyncActions.MERGE},
+        "nfd_data_event_queue": {"action": SyncActions.MERGE},
+        "options": {"action": SyncActions.SKIP},
+        "postmeta": {
+            "action": SyncActions.MERGE,
+            "synthetic_unique_key": ["post_id", "meta_key"]
+        },
+        "posts": {"action": SyncActions.SKIP},
+        "sib_model_forms": {"action": SyncActions.SKIP},
+        "sib_model_users": {"action": SyncActions.MERGE},
+        "tec_events": {"action": SyncActions.MERGE},
+        "tec_occurrences": {"action": SyncActions.MERGE},
+        "termmeta": {"action": SyncActions.MERGE},
+        "terms": {"action": SyncActions.MERGE},
+        "term_relationships": {"action": SyncActions.MERGE},
+        "term_taxonomy": {"action": SyncActions.SKIP},
+        "usermeta": {
+            "action": SyncActions.MERGE,
+            "synthetic_unique_key": ["user_id", "meta_key"]
+        },
+        "users": {"action": SyncActions.MERGE},
+        "wc_admin_notes": {"action": SyncActions.COPY},
+        "wc_admin_note_actions": {
+            "action": SyncActions.MERGE,
+            "synthetic_unique_key": ["note_id", "name"]
+        },
+        "wc_category_lookup": {"action": SyncActions.SKIP},
+        "wc_customer_lookup": {"action": SyncActions.COPY},
+        "wc_download_log": {"action": SyncActions.MERGE},
+        "wc_order_coupon_lookup": {"action": SyncActions.MERGE},
+        "wc_order_product_lookup": {"action": SyncActions.MERGE},
+        "wc_order_stats": {"action": SyncActions.MERGE},
+        "wc_order_tax_lookup": {"action": SyncActions.MERGE},
+        "wc_product_attributes_lookup": {"action": SyncActions.MERGE},
+        "wc_product_download_directories": {"action": SyncActions.MERGE},
+        "wc_product_meta_lookup": {"action": SyncActions.MERGE},
+        "wc_rate_limits": {"action": SyncActions.MERGE},
+        "wc_reserved_stock": {"action": SyncActions.MERGE},
+        "wc_tax_rate_classes": {"action": SyncActions.MERGE},
+        "wc_webhooks": {"action": SyncActions.MERGE},
+        "woocommerce_api_keys": {"action": SyncActions.MERGE},
+        "woocommerce_attribute_taxonomies": {"action": SyncActions.MERGE},
+        "woocommerce_downloadable_product_permissions": {"action": SyncActions.MERGE},
+        "woocommerce_log": {"action": SyncActions.MERGE},
+        "woocommerce_order_itemmeta": {"action": SyncActions.MERGE},
+        "woocommerce_order_items": {"action": SyncActions.MERGE},
+        "woocommerce_payment_tokenmeta": {"action": SyncActions.MERGE},
+        "woocommerce_payment_tokens": {"action": SyncActions.MERGE},
+        "woocommerce_sessions": {"action": SyncActions.COPY},
+        "woocommerce_shipping_zones": {"action": SyncActions.MERGE},
+        "woocommerce_shipping_zone_locations": {"action": SyncActions.MERGE},
+        "woocommerce_shipping_zone_methods": {"action": SyncActions.MERGE},
+        "woocommerce_tax_rates": {"action": SyncActions.MERGE},
+        "woocommerce_tax_rate_locations": {"action": SyncActions.MERGE},
+        "wpforms_logs": {"action": SyncActions.MERGE},
+        "wpforms_payment_meta": {"action": SyncActions.MERGE},
+        "wpforms_payments": {"action": SyncActions.MERGE},
+        "wpforms_tasks_meta": {"action": SyncActions.MERGE},
+        "wpmailsmtp_debug_events": {"action": SyncActions.MERGE},
+        "wpmailsmtp_tasks_meta": {"action": SyncActions.MERGE},
+        "yoast_indexable": {"action": SyncActions.MERGE},
+        "yoast_indexable_hierarchy": {"action": SyncActions.SKIP},
+        "yoast_migrations": {"action": SyncActions.MERGE},
+        "yoast_primary_term": {"action": SyncActions.SKIP},
+        "yoast_seo_links": {"action": SyncActions.SKIP},
+    }
+
+    default_sync_action: SyncActions = SyncActions.DEFAULT
+
     # Controls what happens when data for a pair of
     # tables differ, but the tables don't have
     # a timestamp column
     update_tables_without_timestamp: bool = False
 
     # Override the above
-    update_specific_tables_without_timestamp: Dict[str, bool] = {
-        "options": False
-    }
+    update_specific_tables_without_timestamp: Dict[str, bool] = {}
 
     integer_types = [
         "INTEGER", "INT", "SMALLINT", "TINYINT", "MEDIUMINT", "BIGINT"
@@ -258,6 +350,18 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         if table_name in self.high_water_marks:
             return self.high_water_marks[table_name]
         return -1
+
+    def get_table_action(self, table_name: str) -> SyncActions:
+        """Returns the sync action for a table."""
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("action", self.default_sync_action)
+
+    def get_synthetic_unique_key(self, table_name: str) -> List[str] | None:
+        """Returns the synthetic unique key (if any) for a table."""
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("synthetic_unique_key")
 
     @classmethod
     def obj(cls, initial_settings=None):

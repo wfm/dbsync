@@ -119,3 +119,15 @@ staging_NhU_term_taxonomy
 staging_NhU_usermeta
 staging_NhU_wc_product_meta_lookup
 staging_NhU_woocommerce_sessions
+
+Check of dbsync run:
+MERGE table NhU_postmeta
+Updating table staging_NhU_postmeta
+  Inserting 111 rows
+
+MERGE table NhU_usermeta
+Updating table staging_NhU_usermeta
+  Inserting 20 rows
+
+SKIP table NhU_wpforms_payment_meta by DEFAULT
+SKIP table NhU_wpforms_payments by DEFAULT

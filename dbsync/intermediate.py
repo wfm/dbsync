@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass, field
-from typing import List
+from typing import List, Tuple
 
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.settings import DmlOptions, Settings
@@ -106,27 +106,29 @@ class Table(Intermediate, NameMixin):
         super().__post_init__()
         self.timestamp_columns = Settings.obj().get_timestamp_cols(self.name)
 
+        unique_cols = Settings.obj().get_synthetic_unique_key(self.name)
+        if unique_cols is not None:
+            existing = self.get_unique_key()
+            if existing is not None:
+                msg = f"Table {self.name} already has a unique key - can't add a synthetic one"
+                raise DbSyncCompareException(msg)
+            columns = [KeyColumn(name, None) for name in unique_cols]
+            synth = Key(self.name, columns, is_unique=True)
+            self.append_key(synth)
+            if Settings.obj().verbose_mode:
+                print(f"Added synthetic key to table {self.name}: {synth}")
+
     @property
     def count(self) -> int:
         """Returns the number of columns in the table"""
         return len(self.columns)
 
-    # @property
-    # @deprecated
-    # def primary_keys(self) -> List[str]:
-    #     """Returns the names of the PK columns"""
-    #     pk = [key for key in self.keys if key.is_primary]
-    #     if len(pk) == 1:
-    #         names = [c.name for c in pk[0].columns]
-    #         return names
-    #     raise DbSyncCompareException("Table has no primary key columns")
-
-    def get_primary_key(self) -> Key | None:
+    def get_primary_key(self) -> Tuple[List[Key], str] | None:
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_primary]
         return self._return_key(keys, "primary")
 
-    def get_unique_key(self) -> Key | None:
+    def get_unique_key(self) -> Tuple[List[Key], str] | None:
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_unique]
         return self._return_key(keys, "unique")
@@ -232,6 +234,12 @@ class Table(Intermediate, NameMixin):
                 sql.append("UNLOCK TABLES;")
         return "\n".join(sql)
 
+    def truncate(self) -> str:
+        sql = []
+        sql.append("-- Copy src table to dst")
+        sql.append(f"TRUNCATE TABLE `{self.name}`;")
+        return "\n".join(sql)
+
 
 @dataclass
 class Insert(Intermediate, NameMixin):
@@ -269,6 +277,7 @@ SET AUTOCOMMIT = 0;
 SET time_zone = "+00:00";
 USE `{self.value}`;
 -- Note: there is no commit at the end of the file
+-- DON'T FORGET TO TURN OFF AUTO-COMMIT!
 START TRANSACTION;"""
 
 
