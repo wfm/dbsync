@@ -69,13 +69,11 @@ class InsertDiffs:
         return sql
 
     def generate_sql(self):
-        self._verbose_print(f"Updating table {self.dst_table.name}")
+        self._verbose_print(f"Syncing table {self.dst_table.name}")
         sql = []
         if len(self.table_msg) > 0:
             sql.append(f"-- {self.table_msg}")
             self._verbose_print("  " + self.table_msg)
-
-        sql += self._generate_insert()
 
         upd_len = len(self.updates)
         if (upd_len > 0):
@@ -84,6 +82,8 @@ class InsertDiffs:
             self._verbose_print(f"  Updating {upd_len} {r}")
             for upd in self.updates:
                 sql += self._generate_update(upd)
+
+        sql += self._generate_insert()
 
         return self._join_lines(sql)
 
@@ -135,14 +135,60 @@ class CompareInsert:
 
         add: List[Dict[str, str]] = []
         update: List[InsertRecord] = []
+
+        # TODO temporary
+        # print("<style>")
+        # print(".key { color: black; font-weight: bold; }")
+        # print(".diff { color: red; }")
+        # print("</style>")
+        # key_type = "unique" if dst_table.has_unique_key() else "primary"
+        # print(f"# {dst_table.name}, Key: {key_type}")
+        # print("<table>\n<tr><th>F</th><th>src data</th><th>dst data</th></tr>")
+
+        # def format_value(value, is_diff):
+        #     if value is None:
+        #         formatted = "NULL"
+        #     else:
+        #         formatted = str(value)
+        #         if len(formatted) > 20:
+        #             formatted = formatted[:17] + "..."
+        #     if is_diff:
+        #         return f'<span class="diff">{formatted}</span>'
+        #     return formatted
+
+        # def print_items(src_item, dst_item, flag):
+        #     if src_item is not None and dst_item is not None:
+        #         items = [(l, r, l != r) for l, r in \
+        #                 zip(src_item.insert_vals.values(), dst_item.insert_vals.values())]
+        #     elif dst_item is None:
+        #         items = [(l, None, False) for l in src_item.insert_vals.values()]
+        #     else:
+        #         items = [(None, r, False) for r in dst_item.insert_vals.values()]
+
+        #     line = f"<tr><td>{flag}</td>"
+        #     if src_item is not None:
+        #         left = [format_value(v[0], v[2]) for v in items]
+        #         line += "<td>" + ", ".join(left) + "</td>"
+
+        #     if dst_item is not None:
+        #         right = [format_value(v[1], v[2]) for v in items]
+        #         line += "<td>" + ", ".join(right) + "</td>"
+        #     line += "</tr>"
+        #     print(line)
+
+        # def print_end():
+        #     print("</table>")
+
         while srcgen.is_open:
             if dstgen is None or not dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
+                # print_items(src_item, None, "A")
                 add.append(src_item.insert_vals)
                 src_item = srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
+                # print_items(None, dst_item, "B")
                 dst_item = dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
@@ -154,10 +200,11 @@ class CompareInsert:
                 # we probably want to copy it to dst. Otherwise, we
                 # don't want to do anything.
                 do_update, msg = cls._get_time_info(src_item, dst_item, dst_table)
+                # flag = "D" if do_update else "C"
+                # print_items(src_item, dst_item, flag)
                 if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
-                    update_vals, old_vals = cls._update_only_necessary_cols(src_item, dst_item)
-                    msg += f"\n-- {str(old_vals)}"
+                    update_vals, _ = cls._update_only_necessary_cols(src_item, dst_item)
                     update.append(
                         InsertRecord(
                             src_item.key,
@@ -170,6 +217,7 @@ class CompareInsert:
                 src_item = srcgen.get_next_item()
                 dst_item = dstgen.get_next_item()
 
+        #print_end()
         return InsertDiffs(dst_table, add, update)
 
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")

@@ -56,7 +56,8 @@ Insert statements:
 
     def _add_keys(self, key_list: IM.KeyList) -> None:
         tbl = self.get_table(key_list.name)
-        tbl.keys = key_list.keys
+        for key in key_list.keys:
+            tbl.append_key(key)
 
     def _update_columns(self, mod: IM.Modification):
         tbl = self.get_table(mod.name)

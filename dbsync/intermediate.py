@@ -100,7 +100,7 @@ class Table(Intermediate, NameMixin):
     columns: List[Column]
     timestamp_columns: List[str] = field(default_factory=list)
     post_definition_modifiers: str = field(default="")
-    keys: List[Key] = field(default_factory=list)
+    _keys: List[Key] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()
@@ -117,11 +117,16 @@ class Table(Intermediate, NameMixin):
             self.append_key(synth)
             if Settings.obj().verbose_mode:
                 print(f"Added synthetic key to table {self.name}: {synth}")
+            assert self.has_unique_key()
 
     @property
     def count(self) -> int:
         """Returns the number of columns in the table"""
         return len(self.columns)
+
+    @property
+    def keys(self) -> List[Key]:
+        return self._keys
 
     def get_primary_key(self) -> Tuple[List[Key], str] | None:
         """Returns the unique key, if any"""
@@ -147,6 +152,9 @@ class Table(Intermediate, NameMixin):
         else:
             raise DbSyncCompareException(f"Table has multiple {name} keys - \
                                          I assumed there would be at most 1")
+
+    def has_unique_key(self):
+        return self.get_unique_key() is not None
 
     def append_key(self, key: Key) -> None:
         self.keys.append(key)

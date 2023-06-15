@@ -36,8 +36,18 @@ def get_args():
         default=settings.tbl_prefix)
     argparser.add_argument(
         "--timestamp",
-        help="Info to add to timestamp columns, e.g. tbl=col1,col2;tbl2=col3",
+        help="Info to add to timestamp columns, e.g. tbl1=col1,col2;tbl2=col3",
         default="")
+    argparser.add_argument(
+        "--only",
+        help="Only process the listed tables, e.g., tbl1,tbl2,tbl3",
+        default=""
+    )
+    argparser.add_argument(
+        "-v", "--verify",
+        help="Skips tables that would otherwise be copied",
+        default=False,
+        action="store_true")
     argparser.add_argument(
         "-hw", "--highwater",
         help="Also writes high water mark file",
@@ -70,16 +80,26 @@ def get_args():
         print("Timestamp cols:", d)
         settings.timestamp_cols.update(d)
 
+    only_tables = len(args.only) > 0
+    if only_tables:
+        tables = [settings.get_base_table_name(t) for t in args.only.replace(" ", "").split(",")]
+        settings.included_tables += tables
+
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.output_file = args.output
+    settings.verify_mode = args.verify
     settings.verbose_mode = not args.quiet
     Settings.obj(settings)
     if not args.quiet:
-        print("dbsync from   :", args.filename)
-        print("  database    :", args.database)
-        print("  table prefix:", args.table_prefix)
-        print("  output file :", args.output)
+        if args.verify:
+            print("VERIFY MODE")
+        print("dbsync from    :", args.filename)
+        print("  database     :", args.database)
+        print("  table prefix :", args.table_prefix)
+        print("  output file  :", args.output)
+        if only_tables:
+            print("   only tables :", tables)
     return (args.filename, args.quiet, args.highwater, args.split)
 
 

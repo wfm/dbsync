@@ -164,6 +164,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         'NhU_yoast_seo_links': 2190
     }
 
+    # TODO fill this out with the TableOptions class above
     table_options = {
         "actionscheduler_actions": {"action": SyncActions.COPY},
         "actionscheduler_claims": {"action": SyncActions.MERGE},
@@ -180,7 +181,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
         "options": {"action": SyncActions.SKIP},
         "postmeta": {
-            "action": SyncActions.MERGE,
+            "action": SyncActions.SKIP,
             "synthetic_unique_key": ["post_id", "meta_key"]
         },
         "posts": {"action": SyncActions.SKIP},
@@ -193,13 +194,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "term_relationships": {"action": SyncActions.MERGE},
         "term_taxonomy": {"action": SyncActions.SKIP},
         "usermeta": {
-            "action": SyncActions.MERGE,
+            "action": SyncActions.SKIP,
             "synthetic_unique_key": ["user_id", "meta_key"]
         },
-        "users": {"action": SyncActions.MERGE},
-        "wc_admin_notes": {"action": SyncActions.COPY},
+        "users": {"action": SyncActions.SKIP},
+        "wc_admin_notes": {"action": SyncActions.SKIP},
         "wc_admin_note_actions": {
-            "action": SyncActions.MERGE,
+            "action": SyncActions.SKIP,
             "synthetic_unique_key": ["note_id", "name"]
         },
         "wc_category_lookup": {"action": SyncActions.SKIP},
@@ -266,7 +267,11 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     # of filename above. Shoud be of type TextIOWrapper
     file_descriptor: Any | None = None
 
+    # prints to stdout if true:
     verbose_mode: bool = False
+
+    # don't copy tables if true. used when "verifying" previous run:
+    verify_mode: bool = False
 
     dml_options: DmlOptions = DmlOptions.GENERATE_LOCK_TABLES
 
@@ -355,7 +360,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         """Returns the sync action for a table."""
         base_name = self.get_base_table_name(table_name)
         options = self.table_options.get(base_name, {})
-        return options.get("action", self.default_sync_action)
+        action = options.get("action", self.default_sync_action)
+        if self.verify_mode and action == SyncActions.COPY:
+            return SyncActions.SKIP
+        return action
 
     def get_synthetic_unique_key(self, table_name: str) -> List[str] | None:
         """Returns the synthetic unique key (if any) for a table."""

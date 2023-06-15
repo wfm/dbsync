@@ -87,7 +87,7 @@ class UnpackedInsert:
     def get_key(self, values):
         key_items = self.apply_getter(values, self._key_getter)
         key = []
-        for indicator, str_value in zip(self._key_numeric_cols, key_items):
+        for indicator, str_value in zip(self._key_numeric_cols, key_items, strict=True):
             if str_value.casefold() == "null":
                 val = float("nan")
             elif indicator == "i":
@@ -131,7 +131,6 @@ class UnpackedInsert:
         if (len(self.values) < 2):
             return
 
-        filtered = []
         try:
             self.values.sort(key=self.get_key)
         except KeyError as ke:
@@ -147,17 +146,19 @@ class UnpackedInsert:
 
             raise ke
 
-        i = 0
-        curr = self.get_key(self.values[0])
-        while i < len(self.values) - 1:
-            succ = self.get_key(self.values[i + 1])
-            if curr != succ:
-                filtered.append(self.values[i])
-            i += 1
-            curr = succ
+        # TODO does this work/is it necessary?
+        # filtered = []
+        # i = 0
+        # curr = self.get_key(self.values[0])
+        # while i < len(self.values) - 1:
+        #     succ = self.get_key(self.values[i + 1])
+        #     if curr != succ:
+        #         filtered.append(self.values[i])
+        #     i += 1
+        #     curr = succ
 
-        filtered.append(self.values[-1])
-        self.values = filtered
+        # filtered.append(self.values[-1])
+        # self.values = filtered
 
     def _get_key_values_dict(self, vals: List[str]) -> Dict[str, str]:
         return dict(zip(self.key_column_names, vals, strict=True))

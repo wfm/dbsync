@@ -1,25 +1,22 @@
 # TODO
 ## Urgent
+* PK errors with synthetic UK
+* Compare stuff that is being updated
 * Integration tests - in progress
 * Test with local MySQL
+* Sort tables with unique keys by that key before comparing them
 
 ## Medium-term
+* use ON DUPLICATE KEY UPDATE?
 * Key columns may have lengths
 * Some "comments" are actually MySQL-specific commands, like /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
 * Refactoring
   - Complexity issues
   - move sql generation into separate modules
   - move classes into separate modules
-* Does it matter that we sort everything like a string when there are numeric PK columns?
-- it would be easy to parse the ints...
 * Put settings in a file or read them from a file using command line arg
-* Parse settings at end of create table
 * Use separate InsertRecord and UpdateRecord?
-* use ON DUPLICATE KEY UPDATE?
 * Linter errors in Github
-* Dumps from MySQL Workbench are different from myPhpAdmin (sp?) - auto inc and pk are part of create table.
-* If there are more than N diffs, truncate the dst table and reload? But how to tell if src is more recent?
-* Generalize the state machine code
 * After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
 
 ## Future
@@ -28,8 +25,12 @@
 * Support more flavors of insert statements
 * Support other DML statements?
 * Prevent SQL injection?
+* Generalize the state machine code
 
 #DONE
+* Dumps from MySQL Workbench are different from myPhpAdmin (sp?) - auto inc and pk are part of create table.
+* Parse settings at end of create table
+* Does it matter that we sort everything like a string when there are numeric PK columns?
 * Done: Look at "this is too dumb" in comparison.py
 * Done, test: use a timestamp column to decide whether or not to update
 * Only output required columns for update statements
@@ -49,40 +50,25 @@
 * Use LOCK TABLES `tbl_test0` WRITE; and UNLOCK TABLES?
 * Get it to work with dump from MySQL workbench
 
-LOCK TABLES `staging_tbl_test0` WRITE;
-/*!40000 ALTER TABLE `staging_tbl_test0` DISABLE KEYS */;
-/*! ALTER TABLE `X` AUTO_INCREMENT=Y */;
+2023-06-14:
+Your theme (Astra Child) contains outdated copies of some WooCommerce template files. These files may need updating to ensure they are compatible with the current version of WooCommerce. Suggestions to fix this:
 
-/*!40000 ALTER TABLE `staging_tbl_test0` ENABLE KEYS */;
-UNLOCK TABLES;
+Update your theme to the latest version. If no update is available contact your theme author asking about compatibility with the current WooCommerce version.
+If you copied over a template file to change something, then you will need to copy the new version of the template and apply your changes again.
+
+astra-child/woocommerce/cart/cart-shipping.php,
+astra-child/woocommerce/single-product/product-image.php version 3.5.1 is out of date. The core version is 7.8.0
+
+https://woocommerce.com/document/fix-outdated-templates-woocommerce/
 
 --------
-Apparently, the older options get deleted and new options (same option_name, higher option_id)
-are inserted into the table.
 
-Do we want to enforce unique keys?
-a.) by convoluted sql like where not exists (select 1 from tbl where uniquecol = 'x'), or 
-b.) by filtering the data
-
-Other thoughts:
-Insert records into dest with higher src id's?
-Won't there be overlap of ids in tables where data was added in both systems?
-
-What if we use a dict where the key is the unique columns in the dst table and the value is the primary key
-When looking at a src record, check that the dst record doesn't already have a higher pk value
-
-Implemented the above and am getting:
-15:06:35	INSERT INTO `staging_NhU_options` (`option_id`, `option_name`, `option_value`, `autoload`) VALUES (66748, 'endurance_cloudflare_enabled', 'basic', 'yes'), (66913, 'wc_connect_error_notice', 'Error retrieving the tax rates. Received (401): {\"statusCode\":401,\"error\":\"Unauthorized\",\"message\":\"Invalid credentials\",\"attributes\":{\"error\":\"Invalid credentials\"}}', 'yes'), **(68456, 'loginlockdown_meta',** 
-Error Code: 1062. Duplicate entry 'loginlockdown_meta' for key 'staging_nhu_options.option_name'	0.013 sec
-
-egrep "\(\d+, 'loginlockdown_meta'," ./data/localhost-20230605.sql 
-(68456, 'loginlockdown_meta', 'a:3:{s:13:\"first_version\";s:3:\"2.0\";s:13:\"first_install\";i:1681824751;s:12:\"database_ver\";s:4:\"2.06\";}', 'yes'),
-(68268, 'loginlockdown_meta', 'a:3:{s:13:\"first_version\";s:3:\"2.0\";s:13:\"first_install\";i:1681915353;s:12:\"database_ver\";s:4:\"2.06\";}', 'yes'), 
-
-I guess if you copy the src to the dst, you need to delete the old src record.
-Will there ever be an update?
 
 Better idea: sort by unique key 
+-----------
+
+9587, 442, '_elementor_css', 'a:6:{s:4:\"time\...	9411, 442, '_elementor_css', 'a:6:{s:4:\"time\...
+The data for the above is different
 
 ===========
 
@@ -131,3 +117,15 @@ Updating table staging_NhU_usermeta
 
 SKIP table NhU_wpforms_payment_meta by DEFAULT
 SKIP table NhU_wpforms_payments by DEFAULT
+
+
+--only NhU_postmeta,NhU_usermeta
+
+
+Error Code: 1062. Duplicate entry '9331' for key 'staging_nhu_postmeta.PRIMARY'
+Error Code: 1100. Table 'NhU_postmeta' was not locked with LOCK TABLES
+
+/*!40000 ALTER TABLE `staging_NhU_postmeta` ENABLE KEYS */;
+UNLOCK TABLES;
+
+Error Code: 1064. You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '9331' at line 1

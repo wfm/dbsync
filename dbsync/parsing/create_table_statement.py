@@ -137,8 +137,6 @@ class ParserActions:
         return None
 
     def _check_keytype(self, params: ActionParams) -> ColumnState | None:       # NOSONAR S1172
-        ### print(f"Check key type, primary: {self.is_primary}, unique: {self.is_unique}")
-
         if self.is_primary:
             self.current_key = IM.Key("", [], self.is_primary, self.is_unique)
             return ColumnState.KEY_COLS_START
@@ -146,7 +144,6 @@ class ParserActions:
 
     def _save_key_name(self, params: ActionParams) -> ColumnState | None:
         self.current_key = IM.Key(params.t_curr.value, [], self.is_primary, self.is_unique)
-        ### print(f"Key name: {self.current_key.name}")
 
     def _save_key_col_name(self, params: ActionParams) -> ColumnState | None:
         self.current_key_column = IM.KeyColumn(params.t_curr.value)
@@ -177,7 +174,6 @@ class ParserActions:
             self.state = ColumnState.CLOSE_PAREN
             at_end = True
 
-        ### print(f"_check_for_end_of_column, token: {t.value}, at_end: {at_end}, is_column: {is_column}")
         if at_end and is_column:
             self._on_to_next_column()
         return at_end
@@ -259,7 +255,6 @@ class StateMachine:
             except StopIteration:
                 break
 
-            ### print(f"State: {ColumnState(self.parser_actions.state).name}, token: {repr(t_curr)}")
             params = ActionParams(self.parser_actions.state, t_prev, t_curr)
             processed, next_state = self._apply_no_state_actions(params)
             if not processed:
@@ -347,8 +342,10 @@ def create_table(ss: SqlStatement) -> IM.Table:
         t = ss.get_token()
         if isinstance(t, sql.Parenthesis):
             cl = ColumnList()
-            cols, pks = cl.get_columns(t)
-            table = IM.Table(name, cols, keys=pks)
+            cols, keys = cl.get_columns(t)
+            table = IM.Table(name, cols)
+            for key in keys:
+                table.append_key(key)
             _get_post_table_modifiers(ss, table)
             return table
     raise DbSyncParseException("Invalid CREATE TABLE statement")
