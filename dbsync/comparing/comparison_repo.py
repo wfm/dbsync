@@ -6,6 +6,7 @@ from typing import List, Dict
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
+from dbsync.settings import Settings
 
 
 class ComparisonRepo:
@@ -68,6 +69,8 @@ Insert statements:
             # ComparisonRepo._set_auto_inc(tcol)
             tcol.auto_inc = col.auto_inc
             tcol.auto_inc_val = col.auto_inc_val
+            if tcol.starting_auto_inc_val < 0:
+                tcol.starting_auto_inc_val = col.auto_inc_val
 
     @classmethod
     def _set_auto_inc(cls, col):
@@ -88,7 +91,8 @@ Insert statements:
         for e in existing:
             if insert.columns == e.columns:
                 e.values += unpacked.values
-                e.dedup()
+                # these will be "deduped" later
+                # e.dedup()
                 updated = True
                 break
 
@@ -112,6 +116,20 @@ Insert statements:
     def get_table_names(self) -> List[str]:
         """Returns a list of the table names"""
         return list(self.tables.keys())
+
+    def get_ordered_tables(self) -> List[str]:
+        d = {}
+        for fk in Settings.obj().foreign_keys:
+            if fk.dst_table in d:
+                d[fk.dst_table] += 1
+            else:
+                d[fk.dst_table] = 1
+
+        table_names = [Settings.obj().get_base_table_name(x)
+                       for x in self.tables.keys()
+                       if Settings.obj().is_src_table(x)]
+        table_names.sort(reverse=True, key=lambda x: d[x] if x in d else 0)
+        return [Settings.obj().get_src_table_name_from_base_name(x) for x in table_names]
 
     def get_table(self, name: str) -> IM.Table:
         """Returns a table by name"""

@@ -31,13 +31,23 @@ class SyncActions(Enum):
     MERGE = 3
 
 
+@dataclass
+class ForeignKey:
+    src_table: str
+    src_column: str
+    dst_table: str
+    dst_column: str
+
+
 # TODO Switch to this?
 @dataclass
 class TableOptions:
     action: SyncActions
+    use_time_based_comparison: bool
     timestamp_cols: List[str] | None
     update_without_timestamp: bool | None
     highwater_mark: int
+    foreign_keys: List[ForeignKey]
     synthetic_unique_key: List[str] = field(default_factory=list)
 
 
@@ -61,6 +71,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     src_prefix: str = ""
     dst_prefix: str = "staging_"
     tbl_prefix: str = "NhU_"
+    # Bluehost changes the URLs in the content to point to the staging site
+    base_uri: str = "https://maryjoyart.com/"
+    stage_uri_path: str = "staging/1617/"
+
     included_tables: List[str] = []
     excluded_tables: List[str] = []
 
@@ -164,6 +178,33 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         'NhU_yoast_seo_links': 2190
     }
 
+    foreign_keys = [
+        ForeignKey("actionscheduler_actions", "group_id", "actionscheduler_groups", "group_id"),
+        ForeignKey("actionscheduler_actions", "claim_id", "actionscheduler_claims", "claim_id"),
+        ForeignKey("actionscheduler_logs", "action_id", "actionscheduler_actions", "action_id"),
+        ForeignKey("ce4wp_abandoned_checkout", "user_id", "users", "ID"),
+        ForeignKey("commentmeta", "comment_id", "comments", "comment_ID"),
+        ForeignKey("comments", "comment_post_ID", "posts", "ID"),
+        ForeignKey("comments", "comment_parent", "comments", "comment_ID"),
+        ForeignKey("comments", "user_id", "users", "ID"),
+        ForeignKey("links", "link_owner", "users", "ID"),
+        ForeignKey("lockdowns", "user_id", "users", "ID"),
+        ForeignKey("login_fails", "user_id", "users", "ID"),
+        ForeignKey("postmeta", "post_id", "posts", "ID"),
+        ForeignKey("posts", "post_author", "users", "ID"),
+        ForeignKey("posts", "post_parent", "posts", "ID"),
+        ForeignKey("tec_events", "post_id", "posts", "ID"),
+        ForeignKey("tec_occurrences", "event_id", "tec_events", "event_id"),
+        ForeignKey("tec_occurrences", "post_id", "posts", "ID"),
+        ForeignKey("termmeta", "term_id", "terms", "term_id"),
+        #ForeignKey("terms", "term_group", "", ""),                  # is there a term_group table???
+        ForeignKey("term_relationships", "object_id", "", ""),      # what can this point to? posts, ...
+        ForeignKey("term_relationships", "term_taxonomy_id", "term_taxonomy", "term_taxonomy_id"),
+        ForeignKey("term_taxonomy", "term_id", "terms", "term_id"),
+        ForeignKey("term_taxonomy", "parent", "term_taxonomy", "term_taxonomy_id"),
+        ForeignKey("usermeta", "user_id", "users", "ID"),
+    ]
+
     # TODO fill this out with the TableOptions class above
     table_options = {
         "actionscheduler_actions": {"action": SyncActions.COPY},
@@ -181,23 +222,26 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
         "options": {"action": SyncActions.SKIP},
         "postmeta": {
-            "action": SyncActions.SKIP,
+            "action": SyncActions.MERGE,
             "synthetic_unique_key": ["post_id", "meta_key"]
         },
-        "posts": {"action": SyncActions.SKIP},
+        "posts": {
+            "action": SyncActions.MERGE,
+            "use_time_based_comparison": True
+        },
         "sib_model_forms": {"action": SyncActions.SKIP},
         "sib_model_users": {"action": SyncActions.MERGE},
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
         "termmeta": {"action": SyncActions.MERGE},
-        "terms": {"action": SyncActions.MERGE},
+        "terms": {"action": SyncActions.SKIP},
         "term_relationships": {"action": SyncActions.MERGE},
         "term_taxonomy": {"action": SyncActions.SKIP},
         "usermeta": {
-            "action": SyncActions.SKIP,
+            "action": SyncActions.MERGE,
             "synthetic_unique_key": ["user_id", "meta_key"]
         },
-        "users": {"action": SyncActions.SKIP},
+        "users": {"action": SyncActions.MERGE},
         "wc_admin_notes": {"action": SyncActions.SKIP},
         "wc_admin_note_actions": {
             "action": SyncActions.SKIP,
@@ -302,16 +346,25 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         m = self._table_name_regex.search(table_name)
         if m:
             return m.group(2)
-
-        print("=" * 20)
-        print(repr(self._table_name_regex))
-        print(repr(m))
         msg = f"Doesn't follow table name conventions: {table_name}"
         raise DbSyncParseException(msg)
 
     def get_src_table_name(self, table_name: str) -> str:
         base_name = self.get_base_table_name(table_name)
         return f"{self.src_prefix}{self.tbl_prefix}{base_name}"
+
+    def get_src_table_name_from_base_name(self, base_name: str) -> str:
+        return f"{self.src_prefix}{self.tbl_prefix}{base_name}"
+
+    def is_dst_table(self, table_name: str) -> bool:
+        return re.search(f"^{self.dst_prefix}", table_name) is not None
+
+    def is_src_table(self, table_name: str) -> bool:
+        return not self.is_dst_table(table_name)
+
+    def get_dst_table_name(self, table_name: str) -> str:
+        base_name = self.get_base_table_name(table_name)
+        return f"{self.dst_prefix}{self.tbl_prefix}{base_name}"
 
     def should_include_table(self, table_name):
         """
@@ -346,6 +399,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             return self.timestamp_cols[base_name]
         return []
 
+    # TODO this isn't used
     def get_high_water(self, table_name) -> int:
         """
         Returns the auto_inc value from an earlier backup
@@ -356,9 +410,17 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             return self.high_water_marks[table_name]
         return -1
 
+    def get_foreign_keys(self, table_name) -> List[ForeignKey]:
+        base_name = self.get_base_table_name(table_name)
+        return [fk for fk in self.foreign_keys if fk.src_table == base_name]
+
     def get_table_action(self, table_name: str) -> SyncActions:
         """Returns the sync action for a table."""
         base_name = self.get_base_table_name(table_name)
+        return self.get_table_action_from_base_name(base_name)
+
+    def get_table_action_from_base_name(self, base_name: str) -> SyncActions:
+        """Returns the sync action for a table."""
         options = self.table_options.get(base_name, {})
         action = options.get("action", self.default_sync_action)
         if self.verify_mode and action == SyncActions.COPY:
@@ -370,6 +432,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         base_name = self.get_base_table_name(table_name)
         options = self.table_options.get(base_name, {})
         return options.get("synthetic_unique_key")
+
+    def get_use_time_based_comparison(self, table_name: str) -> bool:
+        """Returns true if comparison should use timestamp column"""
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("use_time_based_comparison", False)
 
     @classmethod
     def obj(cls, initial_settings=None):

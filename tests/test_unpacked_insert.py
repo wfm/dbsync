@@ -34,7 +34,7 @@ class TestUnpackedInsert(unittest.TestCase):
         dups = ui.pack()
         self.assertListEqual(dups.values, v1 + v2, "Unpacked with duplicates")
 
-        ui.dedup()
+        ui.sort()
         nodups = ui.pack()
         v3 = [
             [1, 2, 3],

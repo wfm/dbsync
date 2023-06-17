@@ -1,211 +1,93 @@
 """Compares data between the prod and staging databases"""
 
+from dataclasses import dataclass
 import re
-from dataclasses import dataclass, field
 from typing import List, Dict, Tuple
 
+from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert, InsertRecord
 from dbsync.settings import Settings
 
 
-@dataclass
-class InsertDiffs:
-    dst_table: IM.Table
-    additions: List[Dict[str, str]]
-    updates: List[InsertRecord]
-    table_msg: str = field(default="")
-
-    def _verbose_print(self, msg):
-        if Settings.obj().verbose_mode:
-            print(msg)
-
-    def _pluralize(self, n: int, s: str) -> str:
-        if n == 1:
-            return s
-        return s + "s"
-
-    def _add_semicolon(self, sql: List[str]) -> None:
-        """replace trailing comma with a semicolon"""
-        if sql[-1][-1:] == ",":
-            sql[-1] = sql[-1][:-1] + ";"
-
-    def _join_lines(self, sql: List[str]) -> str:
-        return "\n".join(sql)
-
-    def _generate_insert(self) -> List[str]:
-        add_len = len(self.additions)
-        if (add_len == 0):
-            return []
-
-        sql = []
-        r = self._pluralize(add_len, "row")
-        sql.append(f"-- Inserting {add_len} {r}:")
-        self._verbose_print(f"  Inserting {add_len} {r}")
-        dst_cols = [f"`{col}`" for col in list(self.additions[0].keys())]
-        col_str = ", ".join(dst_cols)
-
-        idx = 0
-        while idx < add_len:
-            sql.append(f"INSERT INTO `{self.dst_table.name}` ({col_str}) VALUES")
-            last = min(add_len, idx + 100)
-            for add in self.additions[idx:last]:
-                values = [val for val in add.values()]
-                sql.append(f"({', '.join(values)}),")
-            self._add_semicolon(sql)
-            idx = last
-
-        return sql
-
-    def _generate_update(self, record: InsertRecord) -> List[str]:
-        sql = []
-        if len(record.msg) > 0:
-            sql.append(f"-- {record.msg}")
-        sql.append(f"UPDATE `{self.dst_table.name}`")
-        assignments = [f"`{col}`={val}" for col, val in record.update_vals.items()]
-        sql.append(f"SET {', '.join(assignments)}")
-        conditions = [f"`{col}`={val}" for col, val in record.key_vals.items()]
-        sql.append(f"WHERE {' AND '.join(conditions)};")
-        return sql
-
-    def generate_sql(self):
-        self._verbose_print(f"Syncing table {self.dst_table.name}")
-        sql = []
-        if len(self.table_msg) > 0:
-            sql.append(f"-- {self.table_msg}")
-            self._verbose_print("  " + self.table_msg)
-
-        upd_len = len(self.updates)
-        if (upd_len > 0):
-            r = self._pluralize(upd_len, "record")
-            sql.append(f"-- Updating {upd_len} {r}:")
-            self._verbose_print(f"  Updating {upd_len} {r}")
-            for upd in self.updates:
-                sql += self._generate_update(upd)
-
-        sql += self._generate_insert()
-
-        return self._join_lines(sql)
-
-
-class Generator:
-    def __init__(self, ui: UnpackedInsert):
-        ui.dedup()      # side effects!
-        self.gen = ui.values_gen()
-        self.is_open = True
-
-    def get_next_item(self) -> InsertRecord | None:
-        item = None
-        if self.is_open:
-            try:
-                item = next(self.gen)
-            except StopIteration:
-                self.is_open = False
-                self.gen.close()
-
-        return item
-
-
-# TODO would this be better with instance methods?
 class CompareInsert:
     """
     Compares the values in two insert statements and generates
     lists of data to be inserted and updated in the dst table
     to make it equivalent to the src table.
     """
+    class Generator:
+        def __init__(self, ui: UnpackedInsert):
+            ui.sort()      # side effects!
+            self.gen = ui.values_gen()
+            self.is_open = True
 
-    @classmethod
-    def compare(
-            cls,
-            src: UnpackedInsert | None,
-            dst: UnpackedInsert | None,
-            dst_table: IM.Table) -> InsertDiffs:
+        def get_next_item(self) -> InsertRecord | None:
+            item = None
+            if self.is_open:
+                try:
+                    item = next(self.gen)
+                except StopIteration:
+                    self.is_open = False
+                    self.gen.close()
 
-        if src is None:
-            return InsertDiffs(dst_table, [], [])
-        srcgen = Generator(src)
-        src_item = srcgen.get_next_item()
+            return item
 
-        if dst is None:
-            dstgen = None
-            dst_item = None
+    def __init__(self,
+                 src: UnpackedInsert | None,
+                 dst: UnpackedInsert | None,
+                 dst_table: IM.Table) -> InsertDiffs:
+        self.src = src
+        self.dst = dst
+        self.dst_table = dst_table
+
+        if self.src is not None:
+            self.srcgen = CompareInsert.Generator(self.src)
+
+        if self.dst is None:
+            self.dstgen = None
         else:
-            dstgen = Generator(dst)
-            dst_item = dstgen.get_next_item()
+            self.dstgen = CompareInsert.Generator(self.dst)
 
-        add: List[Dict[str, str]] = []
-        update: List[InsertRecord] = []
+        self.add: List[Dict[str, str]] = []
+        self.update: List[InsertRecord] = []
 
-        # TODO temporary
-        # print("<style>")
-        # print(".key { color: black; font-weight: bold; }")
-        # print(".diff { color: red; }")
-        # print("</style>")
-        # key_type = "unique" if dst_table.has_unique_key() else "primary"
-        # print(f"# {dst_table.name}, Key: {key_type}")
-        # print("<table>\n<tr><th>F</th><th>src data</th><th>dst data</th></tr>")
+    def compare(self):
+        if self.src is None:
+            return InsertDiffs(self.dst_table, [], [])
+        src_item = self.srcgen.get_next_item()
+        dst_item = self.dstgen.get_next_item()
 
-        # def format_value(value, is_diff):
-        #     if value is None:
-        #         formatted = "NULL"
-        #     else:
-        #         formatted = str(value)
-        #         if len(formatted) > 20:
-        #             formatted = formatted[:17] + "..."
-        #     if is_diff:
-        #         return f'<span class="diff">{formatted}</span>'
-        #     return formatted
-
-        # def print_items(src_item, dst_item, flag):
-        #     if src_item is not None and dst_item is not None:
-        #         items = [(l, r, l != r) for l, r in \
-        #                 zip(src_item.insert_vals.values(), dst_item.insert_vals.values())]
-        #     elif dst_item is None:
-        #         items = [(l, None, False) for l in src_item.insert_vals.values()]
-        #     else:
-        #         items = [(None, r, False) for r in dst_item.insert_vals.values()]
-
-        #     line = f"<tr><td>{flag}</td>"
-        #     if src_item is not None:
-        #         left = [format_value(v[0], v[2]) for v in items]
-        #         line += "<td>" + ", ".join(left) + "</td>"
-
-        #     if dst_item is not None:
-        #         right = [format_value(v[1], v[2]) for v in items]
-        #         line += "<td>" + ", ".join(right) + "</td>"
-        #     line += "</tr>"
-        #     print(line)
-
-        # def print_end():
-        #     print("</table>")
-
-        while srcgen.is_open:
-            if dstgen is None or not dstgen.is_open or src_item.key < dst_item.key:
+        while self.srcgen.is_open:
+            if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
-                # print_items(src_item, None, "A")
-                add.append(src_item.insert_vals)
-                src_item = srcgen.get_next_item()
+                if self.dstgen is None or not self.dstgen.is_open:
+                    dst_key = "None"
+                else:
+                    dst_key = dst_item.key
+                # print(f"< [{src_item.key}]  [{dst_key}] => INSERT src record")
+                self._append_insert_vals(src_item.insert_vals)
+                src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
-                # print_items(None, dst_item, "B")
-                dst_item = dstgen.get_next_item()
+                # print(f"> [{src_item.key}]  [{dst_item.key}] => SKIP dst")
+                dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
-                src_item = srcgen.get_next_item()
-                dst_item = dstgen.get_next_item()
+                # print(f"= [{src_item.key}]  [{dst_item.key}] => SKIP BOTH")
+                src_item = self.srcgen.get_next_item()
+                dst_item = self.dstgen.get_next_item()
             else:
-                # the key are the same but the data is different
-                # what should we do here? if the src record is newer,
-                # we probably want to copy it to dst. Otherwise, we
-                # don't want to do anything.
-                do_update, msg = cls._get_time_info(src_item, dst_item, dst_table)
-                # flag = "D" if do_update else "C"
-                # print_items(src_item, dst_item, flag)
+                # the keys are the same but the data is different
+                # use the timestamp columns to determine which rows to update
+                do_update, msg = self._get_time_info(src_item, dst_item)
+                cols = []  # TODO temp
                 if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
-                    update_vals, _ = cls._update_only_necessary_cols(src_item, dst_item)
-                    update.append(
+                    update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
+                    cols = list(update_vals.keys())   # TODO temp
+                    self.update.append(
                         InsertRecord(
                             src_item.key,
                             None,
@@ -214,27 +96,57 @@ class CompareInsert:
                             src_item.pk, src_item.is_unique,
                             msg))
 
-                src_item = srcgen.get_next_item()
-                dst_item = dstgen.get_next_item()
+                # print(f"{'U' if do_update else 'X'} [{src_item.key}]  [{dst_item.key}] => {cols}")
+                # if "post_content" in update_vals:
+                #     update_vals["post_content"] = update_vals["post_content"][0:50]
+                # print("NEW:")
+                # print(update_vals)
+                # print(80 * '-')
+                # if "post_content" in old_vals:
+                #     old_vals["post_content"] = old_vals["post_content"][0:50]
+                # print("OLD:")
+                # print(old_vals)
+                # print(80 * '=')
 
-        #print_end()
-        return InsertDiffs(dst_table, add, update)
+                src_item = self.srcgen.get_next_item()
+                dst_item = self.dstgen.get_next_item()
+
+        return InsertDiffs(self.dst_table, self.add, self.update)
+
+    def _append_insert_vals(self, insert_vals):
+        new_pk_val = str(self.dst_table.next_autoinc_val())
+        pk_name = self.dst.pk_cols
+        assert len(pk_name) == 1, "Expected 1 PK column name"
+        pk_name = pk_name[0]
+        old_pk_val = insert_vals[pk_name]
+        insert_vals[pk_name] = new_pk_val
+        print(f"new pk: {new_pk_val}, old pk: {old_pk_val}")
+
+        # Update URLs with the id in them
+        # e.g., https://maryjoyart.com/?p=1712
+        pk_re = re.compile(r"(([?&]|&#03f;|&#038;)\w+=)" + old_pk_val + r"\b", flags=re.IGNORECASE)
+        repl = r"\g<1>" + new_pk_val
+        for k, v in insert_vals.items():
+            new_v, num = pk_re.subn(repl, v)
+            if num > 0:
+                insert_vals[k] = new_v
+
+        rd = RowData(insert_vals, int(new_pk_val), int(old_pk_val))
+        self.add.append(rd)
 
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
-    @classmethod
-    def _get_time_info(cls, src_item: InsertRecord, dst_item: InsertRecord, table: IM.Table) \
-            -> Tuple[bool, str]:
+    def _get_time_info(self, src_item: InsertRecord, dst_item: InsertRecord) -> Tuple[bool, str]:
         do_update = False
         msg = ""
-        if table.timestamp_columns is None or \
-                len(table.timestamp_columns) == 0:
+        if self.dst_table.timestamp_columns is None or \
+                len(self.dst_table.timestamp_columns) == 0:
             # not certain whether to update or not to update
-            do_update = Settings.obj().should_update_table(table.name)
+            do_update = Settings.obj().should_update_table(self.dst_table.name)
             msg = "+++ Update of table without a timestamp column"
         else:
-            src_times = cls._get_column_values(src_item.insert_vals, table.timestamp_columns)
-            dst_times = cls._get_column_values(dst_item.insert_vals, table.timestamp_columns)
+            src_times = self._get_column_values(src_item.insert_vals, self.dst_table.timestamp_columns)
+            dst_times = self._get_column_values(dst_item.insert_vals, self.dst_table.timestamp_columns)
             try:
                 src = next(filter(CompareInsert._time_regex.match, src_times))
                 dst = next(filter(CompareInsert._time_regex.match, dst_times))

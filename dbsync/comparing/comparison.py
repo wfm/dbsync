@@ -9,6 +9,7 @@ from operator import attrgetter
 from dbsync import intermediate as IM
 from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.compare_insert import CompareInsert
+from dbsync.comparing.insert_diffs import InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.keyzip import keyzip
 from dbsync.settings import Settings, SyncActions
@@ -19,6 +20,7 @@ class Comparison:
                  repo: ComparisonRepo,
                  filename: str = None,
                  fd: TextIOWrapper = None) -> None:
+        self.insert_diffs: Dict[str, InsertDiffs] = {}
         self.repo = repo
         self.filename = filename
         if fd is not None:
@@ -43,6 +45,7 @@ class Comparison:
         x = getattr(obj, name, None)
         return callable(x)
 
+    # TODO use the version in Settings
     def _is_dst_table(self, name):
         dst_prefix = Settings.obj().dst_prefix
         return re.search(f"^{dst_prefix}", name)
@@ -104,6 +107,7 @@ class Comparison:
         src_inserts = self.repo.get_inserts(src.name)
         dst_inserts = self.repo.get_inserts(dst.name)
         pairs = self._pair_inserts(src_inserts, dst_inserts)
+        print(f"Table {src.name} has {len(pairs)} insert statements")
         self._output_inserts(False, src, dst, pairs)
 
     def _output_inserts(self,
@@ -112,7 +116,11 @@ class Comparison:
                         dst: IM.Table,
                         pairs: List[Tuple[IM.Insert, IM.Insert]]) -> None:
         for p in pairs:
-            diffs = CompareInsert.compare(p[0], p[1], dst)
+            ci = CompareInsert(p[0], p[1], dst)
+            diffs = ci.compare()
+            base_name = Settings.obj().get_base_table_name(dst.name)
+            self.insert_diffs[base_name] = diffs
+            self._patch_foreign_keys(diffs, dst)
             sql_text = diffs.generate_sql()
             if len(sql_text) > 0:
                 self._write_sql(f"\n\n-- Prod table {src.name}")
@@ -135,20 +143,46 @@ class Comparison:
                 self._write_sql("")
                 self._write_sql(dst.enable_autoinc(autoinc_val=new_autoinc))
 
+    def _patch_foreign_keys(self, diffs: InsertDiffs, dst: IM.Table) -> None:
+        fks = Settings.obj().get_foreign_keys(dst.name)
+        for fk in fks:
+            sync_action = Settings.obj().get_table_action_from_base_name(fk.dst_table)
+            if sync_action == SyncActions.SKIP:
+                continue
+
+            assert fk.dst_table in self.insert_diffs, \
+                f"Need to process {fk.dst_table} before {dst.name}"
+            fk_id = self.insert_diffs[fk.dst_table]
+
+            for add in diffs.additions:
+                try:
+                    old_key_val = add.insert_vals[fk.src_column]
+                    if old_key_val is not None and int(old_key_val) > 0:
+                        new_key_val = fk_id.find_replacement_key(int(old_key_val))
+                        if new_key_val != int(old_key_val):
+                            print(f"patch, fk: {fk}, old: {old_key_val}, new: {new_key_val}")
+                            add.insert_vals[fk.src_column] = str(new_key_val)
+
+                except ValueError as err:
+                    print(f"Value error, table {dst.name}, value: {old_key_val}, \
+src: {fk.src_table}.{fk.src_column}, dst: {fk.dst_table}.{fk.dst_column}")
+                    print(err)
+
     def _output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):
             text = statement.generate_sql()
             self._write_sql(text)
 
     def compare(self):
+        # The only thing we output besides insert and update are a few set statements
         for statement in self.repo:
-            if isinstance(statement, IM.Table):
-                self._output_table(statement)
-            elif isinstance(statement, IM.Insert):
-                # we'll output these after the table ddl
-                continue
+            if isinstance(statement, IM.Table) or isinstance(statement, IM.Insert):
+                break
             else:
                 self._output_statement(statement)
+
+        for table_name in self.repo.get_ordered_tables():
+            self._output_table(self.repo.get_table(table_name))
 
     def write_high_water_marks(self):
         if self.filename is None:

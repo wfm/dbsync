@@ -63,6 +63,7 @@ class Column(NameMixin):
     modifiers: str
     auto_inc: bool = field(default_factory=bool)
     auto_inc_val: int = field(default_factory=int)
+    starting_auto_inc_val: int = field(default=-1)
 
     def __post_init__(self):
         super().__post_init__()
@@ -93,6 +94,12 @@ class Column(NameMixin):
         modstr += f" AUTO_INCREMENT, AUTO_INCREMENT={self.auto_inc_val}"
         return self._get_sql_str(terminator, modstr)
 
+    def next_autoinc_val(self) -> int:
+        assert self.auto_inc, "This only works on auto-increment columns"
+        val = self.auto_inc_val
+        self.auto_inc_val += 1
+        return val
+
 
 @dataclass
 class Table(Intermediate, NameMixin):
@@ -100,11 +107,13 @@ class Table(Intermediate, NameMixin):
     columns: List[Column]
     timestamp_columns: List[str] = field(default_factory=list)
     post_definition_modifiers: str = field(default="")
+    use_time_based_comparison: bool = field(default=False)
     _keys: List[Key] = field(default_factory=list)
 
     def __post_init__(self):
         super().__post_init__()
         self.timestamp_columns = Settings.obj().get_timestamp_cols(self.name)
+        self.use_time_based_comparison = Settings.obj().get_use_time_based_comparison(self.name)
 
         unique_cols = Settings.obj().get_synthetic_unique_key(self.name)
         if unique_cols is not None:
@@ -115,9 +124,6 @@ class Table(Intermediate, NameMixin):
             columns = [KeyColumn(name, None) for name in unique_cols]
             synth = Key(self.name, columns, is_unique=True)
             self.append_key(synth)
-            if Settings.obj().verbose_mode:
-                print(f"Added synthetic key to table {self.name}: {synth}")
-            assert self.has_unique_key()
 
     @property
     def count(self) -> int:
@@ -128,12 +134,12 @@ class Table(Intermediate, NameMixin):
     def keys(self) -> List[Key]:
         return self._keys
 
-    def get_primary_key(self) -> Tuple[List[Key], str] | None:
+    def get_primary_key(self) -> Key | None:
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_primary]
         return self._return_key(keys, "primary")
 
-    def get_unique_key(self) -> Tuple[List[Key], str] | None:
+    def get_unique_key(self) -> Key | None:
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_unique]
         return self._return_key(keys, "unique")
@@ -153,8 +159,17 @@ class Table(Intermediate, NameMixin):
             raise DbSyncCompareException(f"Table has multiple {name} keys - \
                                          I assumed there would be at most 1")
 
-    def has_unique_key(self):
+    def has_unique_key(self) -> bool:
         return self.get_unique_key() is not None
+
+    def has_timestamp(self) -> bool:
+        return len(self.timestamp_columns) > 0
+
+    def get_create_time_column_name(self) -> str | None:
+        if len(self.timestamp_columns) > 0:
+            # create time is last in list
+            return self.timestamp_columns[-1]
+        return None
 
     def append_key(self, key: Key) -> None:
         self.keys.append(key)
@@ -204,10 +219,22 @@ class Table(Intermediate, NameMixin):
             return autoinc_col.auto_inc_val
         return -1
 
+    def get_starting_autoinc_val(self) -> int:
+        autoinc_col = self._get_autoinc_column()
+        if autoinc_col is not None:
+            return autoinc_col.starting_auto_inc_val
+        return -1
+
     def update_autoinc_val(self, newval: int) -> None:
         autoinc_col = self._get_autoinc_column()
         if autoinc_col is not None:
             autoinc_col.auto_inc_val = newval
+            if autoinc_col.starting_auto_inc_val < 0:
+                autoinc_col.starting_auto_inc_val = newval
+
+    def next_autoinc_val(self) -> int:
+        autoinc_col = self._get_autoinc_column()
+        return autoinc_col.next_autoinc_val()
 
     def disable_autoinc(self, alt_name: str = None, autoinc_val: int | None = None) -> str:
         sql = []

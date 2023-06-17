@@ -1,10 +1,7 @@
 # TODO
 ## Urgent
 * PK errors with synthetic UK
-* Compare stuff that is being updated
 * Integration tests - in progress
-* Test with local MySQL
-* Sort tables with unique keys by that key before comparing them
 
 ## Medium-term
 * use ON DUPLICATE KEY UPDATE?
@@ -28,6 +25,9 @@
 * Generalize the state machine code
 
 #DONE
+* Compare stuff that is being updated
+* Test with local MySQL
+* Sort tables with unique keys by that key before comparing them
 * Dumps from MySQL Workbench are different from myPhpAdmin (sp?) - auto inc and pk are part of create table.
 * Parse settings at end of create table
 * Does it matter that we sort everything like a string when there are numeric PK columns?

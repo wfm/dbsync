@@ -13,9 +13,9 @@ from dbsync.settings import Settings
 class InsertRecord:
     """Data needed to generate insert and update statements for a table"""
     key: List[str]                          # values of (unique|primary) keys
-    insert_vals: Dict[str, str] | None      # key,value pairs of all columns
+    insert_vals: Dict[str, str]             # key,value pairs of all columns
     key_vals: Dict[str, str]                # key,value pairs of (unique|primary) keys
-    update_vals: List[str]                  # key,value pairs of non-key (unique|primary) columns
+    update_vals: Dict[str, str]             # key,value pairs of non-key (unique|primary) columns
     pk: List[str]                           # temporary
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
@@ -27,7 +27,7 @@ class UnpackedInsert:
         self.name = table.name
         # important: use insert cols not table cols
         self.columns = insert.columns
-        self.values = self._unpack(insert.values)
+        self.values = self._unpack(self._dstify(insert.values))
 
         self.comparison_key = table.get_comparison_key()
         self.is_unique = self.comparison_key.is_unique
@@ -35,6 +35,10 @@ class UnpackedInsert:
             raise DbSyncCompareException("Table has no keys")
 
         self.key_column_names = self.comparison_key.get_column_names()
+        # for timestamp-based comparison
+        if table.use_time_based_comparison:
+            self.create_time_column_name = table.get_create_time_column_name()
+            self.key_column_names = [self.create_time_column_name] + self.key_column_names
         self._key_numeric_cols = []
         for name in self.key_column_names:
             datatype = table.get_column(name).datatype
@@ -122,11 +126,22 @@ class UnpackedInsert:
     def _unpack(self, values: List[List[str]]) -> List[Dict[str, str]]:
         return [dict(zip(self.columns, v, strict=True)) for v in values]
 
+    def _dstify(self, values: List[List[str]]) -> List[List[str]]:
+        if Settings.obj().is_dst_table(self.name):
+            return values
+
+        src_uri = Settings.obj().base_uri
+        dst_uri = Settings.obj().base_uri + Settings.obj().stage_uri_path
+        result = [
+            [v.replace(src_uri, dst_uri) for v in row]
+            for row in values]
+        return result
+
     def pack(self) -> IM.Insert:
         packed_vals = UnpackedInsert.pack_values(self.values)
         return IM.Insert(self.name, self.columns, packed_vals)
 
-    def dedup(self) -> None:
+    def sort(self) -> None:
         """Sort and removed duplicates"""
         if (len(self.values) < 2):
             return
