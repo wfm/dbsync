@@ -150,6 +150,10 @@ class Comparison:
             if sync_action == SyncActions.SKIP:
                 continue
 
+            if len(fk.dst_table) == 0 or len(fk.dst_column) == 0:
+                print(f"The FK info for {dst.name} is incomplete - skipping key patching")
+                return
+
             assert fk.dst_table in self.insert_diffs, \
                 f"Need to process {fk.dst_table} before {dst.name}"
             fk_id = self.insert_diffs[fk.dst_table]

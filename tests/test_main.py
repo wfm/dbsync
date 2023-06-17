@@ -5,7 +5,7 @@ from io import StringIO
 from pathlib import Path
 from typing import List
 
-from dbsync.settings import Settings
+from dbsync.settings import Settings, SyncActions
 from dbsync.main import do_comparison
 
 DIRECTORY = "./tests/data"
@@ -47,6 +47,7 @@ class TestMain:
         settings.tbl_prefix = TBL_PREFIX
         settings.output_file = None
         settings.file_descriptor = self.fd
+        settings.default_sync_action = SyncActions.MERGE
         settings.timestamp_cols = TestMain.timestamp_cols
         settings.init()
 
@@ -56,6 +57,7 @@ class TestMain:
         settings.tbl_prefix = self.saved_settings.tbl_prefix
         settings.output_file = self.saved_settings.output_file
         settings.file_descriptor = self.saved_settings.file_descriptor
+        settings.default_sync_action = self.saved_settings.default_sync_action
         settings.timestamp_cols = self.saved_settings.timestamp_cols
         settings.init()
 

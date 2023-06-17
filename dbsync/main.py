@@ -3,7 +3,7 @@ import time
 
 import sqlparse
 
-from dbsync.settings import Settings
+from dbsync.settings import Settings, SyncActions
 from dbsync.parsing.statement_processor import process_statements
 from dbsync.comparing.comparison import Comparison
 from dbsync.parsing.splitter import Splitter
@@ -19,8 +19,8 @@ def get_args():
 
     argparser = argparse.ArgumentParser(
         prog="dbsync",
-        description="Generates SQL to sync prod DB to staging DB",
-        epilog="So long, and thanks for all the fish!"
+        description="Generates SQL to sync prod DB to staging DB"
+        #epilog="So long, and thanks for all the fish!"
     )
 
     argparser.add_argument(
@@ -42,6 +42,12 @@ def get_args():
         "--only",
         help="Only process the listed tables, e.g., tbl1,tbl2,tbl3",
         default=""
+    )
+    argparser.add_argument(
+        "-da", "--default_action",
+        help="Default action for how to process tables",
+        choices=["DEFAULT", "SKIP", "COPY", "MERGE"],
+        default="DEFAULT"
     )
     argparser.add_argument(
         "-v", "--verify",
@@ -84,9 +90,10 @@ def get_args():
     if only_tables:
         tables = [settings.get_base_table_name(t) for t in args.only.replace(" ", "").split(",")]
         settings.included_tables += tables
-
+# default_sync_action
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
+    settings.default_sync_action = SyncActions[args.default_action]
     settings.output_file = args.output
     settings.verify_mode = args.verify
     settings.verbose_mode = not args.quiet
@@ -97,6 +104,8 @@ def get_args():
         print("dbsync from    :", args.filename)
         print("  database     :", args.database)
         print("  table prefix :", args.table_prefix)
+        if args.default_action != "DEFAULT":
+            print("default action :", args.default_action)
         print("  output file  :", args.output)
         if only_tables:
             print("   only tables :", tables)

@@ -197,12 +197,40 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("tec_occurrences", "event_id", "tec_events", "event_id"),
         ForeignKey("tec_occurrences", "post_id", "posts", "ID"),
         ForeignKey("termmeta", "term_id", "terms", "term_id"),
-        #ForeignKey("terms", "term_group", "", ""),                  # is there a term_group table???
-        ForeignKey("term_relationships", "object_id", "", ""),      # what can this point to? posts, ...
+        # Not sure how to handle this, since it can refer to many tables.
+        # It mostly refers to the posts table, so we'll run with that.
+        ForeignKey("term_relationships", "object_id", "posts", "ID"),
         ForeignKey("term_relationships", "term_taxonomy_id", "term_taxonomy", "term_taxonomy_id"),
         ForeignKey("term_taxonomy", "term_id", "terms", "term_id"),
         ForeignKey("term_taxonomy", "parent", "term_taxonomy", "term_taxonomy_id"),
         ForeignKey("usermeta", "user_id", "users", "ID"),
+        # Only some of the Woocommerce tables are documented
+        # See: https://github.com/woocommerce/woocommerce/wiki/Database-Description
+        # I am only including those for now
+        ForeignKey("wc_download_log", "permission_id", "woocommerce_downloadable_product_permissions", "permission_id"),
+        ForeignKey("wc_download_log", "user_id", "users", "ID"),
+        ForeignKey("wc_webhooks", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_api_keys", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_downloadable_product_permissions", "download_id", "", ""),
+        ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "", ""),
+        ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "", ""),
+        ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
+        ForeignKey("woocommerce_downloadable_product_permissions", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_order_itemmeta", "order_item_id", "woocommerce_order_items", "order_item_id"),
+        ForeignKey("woocommerce_order_items", "order_id", "", ""),
+        ForeignKey("woocommerce_payment_tokenmeta", "payment_token_id", "woocommerce_payment_tokens", "token_id"),
+        ForeignKey("woocommerce_payment_tokens", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_shipping_zone_locations", "zone_id", "woocommerce_shipping_zones", "zone_id"),
+        ForeignKey("woocommerce_shipping_zone_methods", "zone_id", "woocommerce_shipping_zones", "zone_id"),
+        ForeignKey("woocommerce_tax_rate_locations", "tax_rate_id", "woocommerce_tax_rates", "tax_rate_id"),
+        # I left out wpforms_ tables for now
+        ForeignKey("yoast_indexable", "object_id", "posts", "ID"),
+        ForeignKey("yoast_indexable", "author_id",  "users", "ID"),
+        ForeignKey("yoast_indexable", "post_parent", "posts", "ID"),
+        ForeignKey("yoast_primary_term", "post_id", "posts", "ID"),
+        ForeignKey("yoast_primary_term", "term_id", "terms", "term_id"),
+        ForeignKey("yoast_seo_links", "post_id", "posts", "ID"),
+        ForeignKey("yoast_seo_links", "target_post_id", "posts", "ID"),
     ]
 
     # TODO fill this out with the TableOptions class above

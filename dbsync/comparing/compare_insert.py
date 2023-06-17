@@ -1,6 +1,5 @@
 """Compares data between the prod and staging databases"""
 
-from dataclasses import dataclass
 import re
 from typing import List, Dict, Tuple
 
@@ -62,31 +61,22 @@ class CompareInsert:
             if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
-                if self.dstgen is None or not self.dstgen.is_open:
-                    dst_key = "None"
-                else:
-                    dst_key = dst_item.key
-                # print(f"< [{src_item.key}]  [{dst_key}] => INSERT src record")
                 self._append_insert_vals(src_item.insert_vals)
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
-                # print(f"> [{src_item.key}]  [{dst_item.key}] => SKIP dst")
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
-                # print(f"= [{src_item.key}]  [{dst_item.key}] => SKIP BOTH")
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
             else:
                 # the keys are the same but the data is different
                 # use the timestamp columns to determine which rows to update
                 do_update, msg = self._get_time_info(src_item, dst_item)
-                cols = []  # TODO temp
                 if do_update:
                     # TODO use separate InsertRecord and UpdateRecord?
-                    update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
-                    cols = list(update_vals.keys())   # TODO temp
+                    update_vals, _ = self._update_only_necessary_cols(src_item, dst_item)
                     self.update.append(
                         InsertRecord(
                             src_item.key,
@@ -95,18 +85,6 @@ class CompareInsert:
                             update_vals,
                             src_item.pk, src_item.is_unique,
                             msg))
-
-                # print(f"{'U' if do_update else 'X'} [{src_item.key}]  [{dst_item.key}] => {cols}")
-                # if "post_content" in update_vals:
-                #     update_vals["post_content"] = update_vals["post_content"][0:50]
-                # print("NEW:")
-                # print(update_vals)
-                # print(80 * '-')
-                # if "post_content" in old_vals:
-                #     old_vals["post_content"] = old_vals["post_content"][0:50]
-                # print("OLD:")
-                # print(old_vals)
-                # print(80 * '=')
 
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
