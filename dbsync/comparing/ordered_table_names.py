@@ -34,7 +34,6 @@ class OrderedTableNames:
             return
 
         self._accumulate(table_name_pair[1])
-        print(f"follow_chain {table_name_pair} ({level})")
         if len(table_name_pair[1]) > 0:
             idx = bisect_left(self.key_tables, table_name_pair[1], key=lambda k: k[0])
             while idx != len(self.key_tables) and table_name_pair[1] == self.key_tables[idx][0]:
@@ -54,7 +53,4 @@ class OrderedTableNames:
                        for x in self.unordered_table_names
                        if Settings.obj().is_src_table(x)]
         table_names.sort(key=lambda x: self._get_final_sort_key(x))
-        print("Sorted table names:")
-        for tn in table_names:
-            print(f"  {tn}: {self.accumulator[tn] if tn in self.accumulator else 0}")
         return [Settings.obj().get_src_table_name_from_base_name(x) for x in table_names]

@@ -70,33 +70,33 @@ class Comparison:
             return
 
         if not Settings.obj().should_include_table(table.name):
-            self._print_remark(f"DO NOT INCLUDE table {table.name}")
+            self._print_remark(f"\nDO NOT INCLUDE table {table.name}")
             return
 
         # Get the action. If we skip this table, just return
         action = Settings.obj().get_table_action(table.name)
         if action == SyncActions.DEFAULT:
-            self._print_remark(f"SKIP table {table.name} by DEFAULT")
+            self._print_remark(f"\nSKIP table {table.name} by DEFAULT")
             return
 
         if action == SyncActions.SKIP:
-            self._print_remark(f"SKIP table {table.name}")
+            self._print_remark(f"\nSKIP table {table.name}")
             return
 
         dst_name = self._get_dst_name(table.name)
         dst = self.repo.get_table(dst_name)
 
         if action == SyncActions.COPY:
-            self._print_remark(f"COPY table {table.name}")
+            self._print_remark(f"\nCOPY table {table.name}")
             self._copy_table(table, dst)
             return
 
         if action == SyncActions.MERGE:
-            self._print_remark(f"MERGE table {table.name}")
+            self._print_remark(f"\nMERGE table {table.name}")
             self._merge_table(table, dst)
             return
 
-        self._print_remark(f"Not sure what to do with table {table.name}")
+        self._print_remark(f"\nNot sure what to do with table {table.name}")
 
     def _copy_table(self, src: IM.Table, dst: IM.Table) -> None:
         src_inserts = self.repo.get_inserts(src.name)
@@ -107,8 +107,15 @@ class Comparison:
         src_inserts = self.repo.get_inserts(src.name)
         dst_inserts = self.repo.get_inserts(dst.name)
         pairs = self._pair_inserts(src_inserts, dst_inserts)
-        print(f"Table {src.name} has {len(pairs)} insert statements")
-        self._output_inserts(False, src, dst, pairs)
+        self._print_remark(f"  Table {src.name} has {len(pairs)} insert statements")
+        if len(pairs) > 0:
+            self._output_inserts(False, src, dst, pairs)
+        else:
+            self._add_to_insert_diffs(dst, InsertDiffs(dst, [], [], f"Table {src.name} has no data"))
+
+    def _add_to_insert_diffs(self, dst: IM.Table, diffs: InsertDiffs):
+        base_name = Settings.obj().get_base_table_name(dst.name)
+        self.insert_diffs[base_name] = diffs
 
     def _output_inserts(self,
                         truncate: bool,
@@ -116,10 +123,9 @@ class Comparison:
                         dst: IM.Table,
                         pairs: List[Tuple[IM.Insert, IM.Insert]]) -> None:
         for p in pairs:
-            ci = CompareInsert(p[0], p[1], dst)
+            ci = CompareInsert(p[0], src, p[1], dst, truncate)
             diffs = ci.compare()
-            base_name = Settings.obj().get_base_table_name(dst.name)
-            self.insert_diffs[base_name] = diffs
+            self._add_to_insert_diffs(dst, diffs)
             self._patch_foreign_keys(diffs, dst)
             sql_text = diffs.generate_sql()
             if len(sql_text) > 0:
@@ -150,12 +156,13 @@ class Comparison:
             if sync_action == SyncActions.SKIP:
                 continue
 
+            self._print_remark(f"  Patching {fk}")
             if len(fk.dst_table) == 0 or len(fk.dst_column) == 0:
-                print(f"The FK info for {dst.name} is incomplete - skipping key patching")
+                self._print_remark(f"    The FK info for {dst.name} is incomplete - skipping key patching")
                 return
 
             assert fk.dst_table in self.insert_diffs, \
-                f"Need to process {fk.dst_table} before {dst.name}"
+                f"Need to process {fk.dst_table} before {Settings.obj().get_base_table_name(dst.name)}"
             fk_id = self.insert_diffs[fk.dst_table]
 
             for add in diffs.additions:
@@ -164,7 +171,7 @@ class Comparison:
                     if old_key_val is not None and int(old_key_val) > 0:
                         new_key_val = fk_id.find_replacement_key(int(old_key_val))
                         if new_key_val != int(old_key_val):
-                            print(f"patch, fk: {fk}, old: {old_key_val}, new: {new_key_val}")
+                            self._print_remark(f"    fk: {fk}, old: {old_key_val}, new: {new_key_val}")
                             add.insert_vals[fk.src_column] = str(new_key_val)
 
                 except ValueError as err:

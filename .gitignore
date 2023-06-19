@@ -3,7 +3,7 @@
 .DS_Store
 data/
 src/
-output*.*
+output/
 *[Nn]otes*.txt
 
 # Byte-compiled / optimized / DLL files

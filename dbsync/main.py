@@ -1,5 +1,7 @@
 import argparse
+from pstats import SortKey
 import time
+import cProfile
 
 import sqlparse
 
@@ -20,7 +22,6 @@ def get_args():
     argparser = argparse.ArgumentParser(
         prog="dbsync",
         description="Generates SQL to sync prod DB to staging DB"
-        #epilog="So long, and thanks for all the fish!"
     )
 
     argparser.add_argument(
@@ -75,6 +76,11 @@ def get_args():
         help="Suppresses output to stdout",
         default=False,
         action="store_true")
+    argparser.add_argument(
+        "--profile",
+        help="Run the program with cProfile",
+        default=False,
+        action="store_true")
 
     args = argparser.parse_args()
 
@@ -109,13 +115,17 @@ def get_args():
         print("  output file  :", args.output)
         if only_tables:
             print("   only tables :", tables)
-    return (args.filename, args.quiet, args.highwater, args.split)
+    return (args.filename, args.quiet, args.highwater, args.split, args.profile)
 
 
 def main():
-    filename, quiet, highwater, split = get_args()
+    filename, quiet, highwater, split, profile = get_args()
     if split:
         do_split(filename)
+    elif profile:
+        with cProfile.Profile() as prof:
+            do_comparison(filename, quiet, highwater)
+            prof.print_stats(sort=SortKey.CUMULATIVE)
     else:
         do_comparison(filename, quiet, highwater)
     return 0

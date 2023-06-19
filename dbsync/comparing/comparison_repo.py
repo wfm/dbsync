@@ -1,10 +1,12 @@
 """Data structures to store intermediate representations of the SQL"""
 
+from bisect import bisect_left
 import re
-from typing import List, Dict
+from typing import List, Dict, Tuple
 
 from dbsync import intermediate as IM
 from dbsync.comparing.unpacked_insert import UnpackedInsert
+from dbsync.comparing.ordered_table_names import OrderedTableNames
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.settings import Settings
 
@@ -118,18 +120,8 @@ Insert statements:
         return list(self.tables.keys())
 
     def get_ordered_tables(self) -> List[str]:
-        d = {}
-        for fk in Settings.obj().foreign_keys:
-            if fk.dst_table in d:
-                d[fk.dst_table] += 1
-            else:
-                d[fk.dst_table] = 1
-
-        table_names = [Settings.obj().get_base_table_name(x)
-                       for x in self.tables.keys()
-                       if Settings.obj().is_src_table(x)]
-        table_names.sort(reverse=True, key=lambda x: d[x] if x in d else 0)
-        return [Settings.obj().get_src_table_name_from_base_name(x) for x in table_names]
+        otn = OrderedTableNames(list(self.tables.keys()))
+        return otn.get_ordered_tables()
 
     def get_table(self, name: str) -> IM.Table:
         """Returns a table by name"""

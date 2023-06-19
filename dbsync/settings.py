@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 import re
-from typing import Dict, List, Any
+from typing import Callable, Dict, List, Any
 from pydantic import BaseModel, PrivateAttr
 from enum import Enum
 
@@ -17,6 +17,21 @@ def to_camel(string: str) -> str:
     first = words.pop(0)
     rest = "".join(word.capitalize() for word in words)
     return first + rest
+
+
+# methods for "special rules" for modding src data
+def alter_table_name(value: str) -> str:
+    settings = Settings.obj()
+    pattern = f"(?<!{settings.dst_prefix}){settings.tbl_prefix}"
+    repl = f"{settings.dst_prefix}{settings.tbl_prefix}"
+    return re.sub(pattern, repl, value)
+
+
+def alter_site_url(value: str) -> str:
+    settings = Settings.obj()
+    src_uri = settings.base_uri
+    dst_uri = settings.base_uri + settings.stage_uri_path
+    return value.replace(src_uri, dst_uri)
 
 
 class DmlOptions(Enum):
@@ -49,6 +64,7 @@ class TableOptions:
     highwater_mark: int
     foreign_keys: List[ForeignKey]
     synthetic_unique_key: List[str] = field(default_factory=list)
+    special_rules: Dict[str, Callable[[str], str]] = field(default_factory=dict)
 
 
 class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
@@ -178,7 +194,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         'NhU_yoast_seo_links': 2190
     }
 
-    foreign_keys = [
+    foreign_keys: List[ForeignKey] = [
         ForeignKey("actionscheduler_actions", "group_id", "actionscheduler_groups", "group_id"),
         ForeignKey("actionscheduler_actions", "claim_id", "actionscheduler_claims", "claim_id"),
         ForeignKey("actionscheduler_logs", "action_id", "actionscheduler_actions", "action_id"),
@@ -209,23 +225,23 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         # I am only including those for now
         ForeignKey("wc_download_log", "permission_id", "woocommerce_downloadable_product_permissions", "permission_id"),
         ForeignKey("wc_download_log", "user_id", "users", "ID"),
-        ForeignKey("wc_webhooks", "user_id",  "users", "ID"),
-        ForeignKey("woocommerce_api_keys", "user_id",  "users", "ID"),
+        ForeignKey("wc_webhooks", "user_id", "users", "ID"),
+        ForeignKey("woocommerce_api_keys", "user_id", "users", "ID"),
         ForeignKey("woocommerce_downloadable_product_permissions", "download_id", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
-        ForeignKey("woocommerce_downloadable_product_permissions", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_downloadable_product_permissions", "user_id", "users", "ID"),
         ForeignKey("woocommerce_order_itemmeta", "order_item_id", "woocommerce_order_items", "order_item_id"),
         ForeignKey("woocommerce_order_items", "order_id", "", ""),
         ForeignKey("woocommerce_payment_tokenmeta", "payment_token_id", "woocommerce_payment_tokens", "token_id"),
-        ForeignKey("woocommerce_payment_tokens", "user_id",  "users", "ID"),
+        ForeignKey("woocommerce_payment_tokens", "user_id", "users", "ID"),
         ForeignKey("woocommerce_shipping_zone_locations", "zone_id", "woocommerce_shipping_zones", "zone_id"),
         ForeignKey("woocommerce_shipping_zone_methods", "zone_id", "woocommerce_shipping_zones", "zone_id"),
         ForeignKey("woocommerce_tax_rate_locations", "tax_rate_id", "woocommerce_tax_rates", "tax_rate_id"),
         # I left out wpforms_ tables for now
         ForeignKey("yoast_indexable", "object_id", "posts", "ID"),
-        ForeignKey("yoast_indexable", "author_id",  "users", "ID"),
+        ForeignKey("yoast_indexable", "author_id", "users", "ID"),
         ForeignKey("yoast_indexable", "post_parent", "posts", "ID"),
         ForeignKey("yoast_primary_term", "post_id", "posts", "ID"),
         ForeignKey("yoast_primary_term", "term_id", "terms", "term_id"),
@@ -255,7 +271,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         },
         "posts": {
             "action": SyncActions.MERGE,
-            "use_time_based_comparison": True
+            "use_time_based_comparison": True,
+            "special_rules": {
+                "guid": alter_site_url
+            }
         },
         "sib_model_forms": {"action": SyncActions.SKIP},
         "sib_model_users": {"action": SyncActions.MERGE},
@@ -267,7 +286,11 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "term_taxonomy": {"action": SyncActions.SKIP},
         "usermeta": {
             "action": SyncActions.MERGE,
-            "synthetic_unique_key": ["user_id", "meta_key"]
+            "synthetic_unique_key": ["user_id", "meta_key"],
+            "special_rules": {
+                "meta_key": alter_table_name,
+                "meta_value": alter_table_name
+            }
         },
         "users": {"action": SyncActions.MERGE},
         "wc_admin_notes": {"action": SyncActions.SKIP},
@@ -321,10 +344,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     # Controls what happens when data for a pair of
     # tables differ, but the tables don't have
     # a timestamp column
-    update_tables_without_timestamp: bool = False
+    update_tables_without_timestamp: bool = True
 
     # Override the above
-    update_specific_tables_without_timestamp: Dict[str, bool] = {}
+    update_specific_tables_without_timestamp: Dict[str, bool] = {
+        "usermeta": True
+    }
 
     integer_types = [
         "INTEGER", "INT", "SMALLINT", "TINYINT", "MEDIUMINT", "BIGINT"
@@ -334,7 +359,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     ]
 
     # filename for generated sql, or None for stdout
-    output_file: str | None = "output.sql"
+    output_file: str | None = "./output/output.sql"
     # if not None, generated sql is written here instead
     # of filename above. Shoud be of type TextIOWrapper
     file_descriptor: Any | None = None
@@ -460,6 +485,11 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         base_name = self.get_base_table_name(table_name)
         options = self.table_options.get(base_name, {})
         return options.get("synthetic_unique_key")
+
+    def get_special_rules(self, table_name: str) -> Dict[str, Callable[[str], str]]:
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("special_rules")
 
     def get_use_time_based_comparison(self, table_name: str) -> bool:
         """Returns true if comparison should use timestamp column"""

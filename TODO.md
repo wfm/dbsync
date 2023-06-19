@@ -129,3 +129,39 @@ Error Code: 1100. Table 'NhU_postmeta' was not locked with LOCK TABLES
 UNLOCK TABLES;
 
 Error Code: 1064. You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '9331' at line 1
+==============
+
+    def get_ordered_tables(self) -> List[str]:
+        def keyfunc(fk: ForeignKey) -> Tuple[str, str]:
+            return fk.src_table, fk.src_column
+
+        accumulator = {}
+        fks = Settings.obj().foreign_keys
+        fks.sort(key=keyfunc)
+
+        def find_fk(key: Tuple[str, str]) -> ForeignKey | None:
+            idx = bisect_left(fks, key, key=keyfunc)
+            if idx != len(fks) and key == keyfunc(fks[idx]):
+                return fks[idx]
+            return None
+
+        def accumulate(fk: ForeignKey, level: int = 0):
+            print(f"accumulate {fk} ({level})")
+            if fk.dst_table in accumulator:
+                accumulator[fk.dst_table] += 1
+            else:
+                accumulator[fk.dst_table] = 1
+
+            if fk.src_table != fk.dst_table:
+                next_fk = find_fk((fk.dst_table, fk.dst_column))
+                if next_fk is not None:
+                    accumulate(next_fk, level + 1)
+
+        for fk in fks:
+            accumulate(fk)
+
+        table_names = [Settings.obj().get_base_table_name(x)
+                       for x in self.tables.keys()
+                       if Settings.obj().is_src_table(x)]
+        table_names.sort(reverse=True, key=lambda x: accumulator[x] if x in accumulator else 0)
+        return [Settings.obj().get_src_table_name_from_base_name(x) for x in table_names]

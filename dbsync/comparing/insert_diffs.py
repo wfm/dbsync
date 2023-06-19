@@ -48,7 +48,7 @@ class InsertDiffs:
         sql = []
         r = self._pluralize(add_len, "row")
         sql.append(f"-- Inserting {add_len} {r}:")
-        self._verbose_print(f"  Inserting {add_len} {r}")
+        self._verbose_print(f"    Inserting {add_len} {r}")
         dst_cols = [f"`{col}`" for col in list(self.additions[0].insert_vals.keys())]
         col_str = ", ".join(dst_cols)
 
@@ -76,7 +76,7 @@ class InsertDiffs:
         return sql
 
     def generate_sql(self):
-        self._verbose_print(f"Syncing table {self.dst_table.name}")
+        self._verbose_print(f"  Syncing table {self.dst_table.name}")
         sql = []
         if len(self.table_msg) > 0:
             sql.append(f"-- {self.table_msg}")
@@ -86,7 +86,7 @@ class InsertDiffs:
         if (upd_len > 0):
             r = self._pluralize(upd_len, "record")
             sql.append(f"-- Updating {upd_len} {r}:")
-            self._verbose_print(f"  Updating {upd_len} {r}")
+            self._verbose_print(f"    Updating {upd_len} {r}")
             for upd in self.updates:
                 sql += self._generate_update(upd)
 

@@ -16,7 +16,7 @@ class InsertRecord:
     insert_vals: Dict[str, str]             # key,value pairs of all columns
     key_vals: Dict[str, str]                # key,value pairs of (unique|primary) keys
     update_vals: Dict[str, str]             # key,value pairs of non-key (unique|primary) columns
-    pk: List[str]                           # temporary
+    pk: List[str]                           # primary key values
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
 
@@ -27,7 +27,7 @@ class UnpackedInsert:
         self.name = table.name
         # important: use insert cols not table cols
         self.columns = insert.columns
-        self.values = self._unpack(self._dstify(insert.values))
+        self.values = self._dstify(self._unpack(insert.values))
 
         self.comparison_key = table.get_comparison_key()
         self.is_unique = self.comparison_key.is_unique
@@ -52,7 +52,6 @@ class UnpackedInsert:
 
         self._key_getter = itemgetter(*self.key_column_names)
 
-        # TODO temporary (or is it?)
         pk = table.get_primary_key()
         self.pk_cols = pk.get_column_names()
         self._pk_getter = itemgetter(*self.pk_cols)
@@ -126,14 +125,21 @@ class UnpackedInsert:
     def _unpack(self, values: List[List[str]]) -> List[Dict[str, str]]:
         return [dict(zip(self.columns, v, strict=True)) for v in values]
 
-    def _dstify(self, values: List[List[str]]) -> List[List[str]]:
+    def _dstify(self, values: List[Dict[str, str]]) -> List[List[str]]:
         if Settings.obj().is_dst_table(self.name):
             return values
 
-        src_uri = Settings.obj().base_uri
-        dst_uri = Settings.obj().base_uri + Settings.obj().stage_uri_path
+        rules = Settings.obj().get_special_rules(self.name)
+        if rules is None:
+            return values
+
+        def apply_rules(key: str, value: str) -> str:
+            if key in rules:
+                return rules[key](value)
+            return value
+
         result = [
-            [v.replace(src_uri, dst_uri) for v in row]
+            {k: apply_rules(k, v) for k, v in row.items()}
             for row in values]
         return result
 
@@ -161,20 +167,6 @@ class UnpackedInsert:
 
             raise ke
 
-        # TODO does this work/is it necessary?
-        # filtered = []
-        # i = 0
-        # curr = self.get_key(self.values[0])
-        # while i < len(self.values) - 1:
-        #     succ = self.get_key(self.values[i + 1])
-        #     if curr != succ:
-        #         filtered.append(self.values[i])
-        #     i += 1
-        #     curr = succ
-
-        # filtered.append(self.values[-1])
-        # self.values = filtered
-
     def _get_key_values_dict(self, vals: List[str]) -> Dict[str, str]:
         return dict(zip(self.key_column_names, vals, strict=True))
 
@@ -189,6 +181,5 @@ class UnpackedInsert:
             key = self.get_key(v)
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
-            # temporary
             pk = self.apply_getter(v, self._pk_getter)
             yield InsertRecord(key, v, kv, upd, pk, self.is_unique)
