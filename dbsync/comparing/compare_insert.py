@@ -166,9 +166,11 @@ class CompareInsert:
 
     def _append_insert_vals(self, insert_vals: Dict[str, str]) -> RowData:
         """Updates the PK, if necessary, and appends the record to the add list."""
-        if self.are_copying or not self.dst_table.has_autoinc_column():
+        if self.are_copying:
             _, old_pk_val = self._get_old_pk_val(insert_vals)
             rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
+        elif not self.dst_table.has_autoinc_column():
+            rd = RowData(insert_vals, -1, -1)
         else:
             rd = self._update_pk(insert_vals)
 

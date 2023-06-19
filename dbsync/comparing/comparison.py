@@ -136,9 +136,10 @@ class Comparison:
                 else:
                     self._write_sql("-- No staging table found")
 
-                new_autoinc = max(src.get_autoinc_val(), dst.get_autoinc_val())
-                self._write_sql("")
-                self._write_sql(dst.disable_autoinc(autoinc_val=new_autoinc))
+                if src.has_autoinc_column():
+                    new_autoinc = max(src.get_autoinc_val(), dst.get_autoinc_val())
+                    self._write_sql("")
+                    self._write_sql(dst.disable_autoinc(autoinc_val=new_autoinc))
 
                 if truncate:
                     self._write_sql("")
@@ -147,9 +148,11 @@ class Comparison:
                 self._write_sql("")
                 self._write_sql(sql_text)
 
-                self._write_sql("")
-                self._write_sql(dst.enable_autoinc(autoinc_val=new_autoinc))
+                if src.has_autoinc_column():
+                    self._write_sql("")
+                    self._write_sql(dst.enable_autoinc(autoinc_val=new_autoinc))
 
+    # TODO what happens with multi-column keys?
     def _patch_foreign_keys(self, diffs: InsertDiffs, dst: IM.Table) -> None:
         fks = Settings.obj().get_foreign_keys(dst.name)
         for fk in fks:
@@ -159,11 +162,13 @@ class Comparison:
 
             self._print_remark(f"  Patching {fk}")
             if len(fk.dst_table) == 0 or len(fk.dst_column) == 0:
-                self._print_remark(f"    The FK info for {dst.name} is incomplete - skipping key patching")
+                self._print_remark(f"    The FK info for {dst.name} is incomplete - \
+skipping key patching")
                 return
 
             assert fk.dst_table in self.insert_diffs, \
-                f"Need to process {fk.dst_table} before {Settings.obj().get_base_table_name(dst.name)}"
+                f"Need to process {fk.dst_table} before \
+{Settings.obj().get_base_table_name(dst.name)}"
             fk_id = self.insert_diffs[fk.dst_table]
 
             for add in diffs.additions:
@@ -172,13 +177,14 @@ class Comparison:
                     if old_key_val is not None and int(old_key_val) > 0:
                         new_key_val = fk_id.find_replacement_key(int(old_key_val))
                         if new_key_val != int(old_key_val):
-                            self._print_remark(f"    fk: {fk}, old: {old_key_val}, new: {new_key_val}")
+                            self._print_remark(
+                                f"    fk: {fk}, old: {old_key_val}, new: {new_key_val}")
                             add.insert_vals[fk.src_column] = str(new_key_val)
 
                 except ValueError as err:
-                    print(f"Value error, table {dst.name}, value: {old_key_val}, \
+                    print(f"    Value error, table {dst.name}, value: {old_key_val}, \
 src: {fk.src_table}.{fk.src_column}, dst: {fk.dst_table}.{fk.dst_column}")
-                    print(err)
+                    print("    " + str(err))
 
     def _output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

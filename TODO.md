@@ -62,6 +62,9 @@ astra-child/woocommerce/single-product/product-image.php version 3.5.1 is out of
 https://woocommerce.com/document/fix-outdated-templates-woocommerce/
 
 
+The code assumes that a table has one PK column and that column has auto-increment
+
+
 -- ALTER TABLE `staging_NhU_yoast_indexable_hierarchy`
 --   ADD PRIMARY KEY (`indexable_id`,`ancestor_id`),
 

@@ -105,4 +105,4 @@ class InsertDiffs:
         if old_key_val < self.dst_table.get_starting_autoinc_val():
             return old_key_val
         raise ValueError(f"Old key {old_key_val} not found \
-and is > starting autoinc value ({self.dst_table.get_starting_autoinc_val()})")
+and is >= starting autoinc value ({self.dst_table.get_starting_autoinc_val()})")
