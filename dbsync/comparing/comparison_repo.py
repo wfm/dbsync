@@ -45,6 +45,12 @@ Insert statements:
 {self.inserts}
 """
 
+    def dump_everything(self, table_name):
+        everything = [x for x in self.parsed if hasattr(x, "name") and x.name == table_name]
+        print(f"Dump of everything related to {table_name}:")
+        for e in everything:
+            print(e)
+
     def append(self, item: IM.Intermediate) -> None:
         """Appends the representation of a SQL statement to the repo"""
         self.parsed.append(item)

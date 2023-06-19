@@ -1,7 +1,9 @@
 """Compares data between the prod and staging databases"""
 
+from io import TextIOWrapper
+import os
 import re
-from typing import List, Dict, Tuple
+from typing import Any, List, Dict, Tuple
 
 from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync import intermediate as IM
@@ -47,8 +49,8 @@ class CompareInsert:
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
-        self.debug_mode = False
-        # debug_mode = self.dst_table.name == "staging_NhU_postmeta"
+        self.debug_mode = Settings.obj().debug_mode
+        self.debug_file = self._create_debug_file()
 
         if self.src is not None:
             self.srcgen = CompareInsert.Generator(self.src)
@@ -60,6 +62,22 @@ class CompareInsert:
 
         self.add: List[RowData] = []
         self.update: List[InsertRecord] = []
+
+    def _create_debug_file(self) -> TextIOWrapper | None:
+        if self.debug_mode:
+            debug_filename = f"{Settings.obj().get_base_table_name(self.src.name)}-debug.txt"
+            output_dir = os.path.dirname(Settings.obj().output_file)
+            debug_path = os.path.join(output_dir, "debug")
+            if not os.path.exists(debug_path):
+                os.makedirs(debug_path)
+            full_path = os.path.join(debug_path, debug_filename)
+            debug_file = open(full_path, "w", encoding="utf8")
+            return debug_file
+        return None
+
+    def _debug_print(self, obj: Any) -> None:
+        if self.debug_mode:
+            self.debug_file.write(str(obj))
 
     def _verbose_print(self, msg):
         if Settings.obj().verbose_mode:
@@ -81,7 +99,7 @@ class CompareInsert:
                         dst_key = "None"
                     else:
                         dst_key = dst_item.key
-                    print(f"< {src_item.key}  {dst_key} => INSERT src record")
+                    self._debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
                     # hwm = Settings.obj().get_high_water(self.src_table.name)
                     # print(f"  hwm: {hwm}, pk: {src_item.pk}")
 
@@ -90,13 +108,13 @@ class CompareInsert:
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
                 if self.debug_mode:
-                    print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
+                    self._debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
 
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
                 # if self.debug_mode:
-                #     print(f"= {src_item.key}  {dst_item.key} => SKIP")
+                #     self._debug_print(f"= {src_item.key}  {dst_item.key} => SKIP")
 
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
@@ -130,25 +148,25 @@ class CompareInsert:
                         msg))
 
         if self.debug_mode:
-            print(f"{'U' if updated else 'X'} {src_item.key}  {dst_item.key} => {cols}")
-            print(msg)
+            self._debug_print(f"{'U' if updated else 'X'} {src_item.key}  {dst_item.key} => {cols}")
+            self._debug_print(msg)
 
             if not updated:
                 update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
             if "meta_value" in update_vals:
                 update_vals["meta_value"] = update_vals["meta_value"][0:50]
-            print("NEW:")
-            print(update_vals)
-            print(80 * '-')
+            self._debug_print("NEW:")
+            self._debug_print(update_vals)
+            self._debug_print(80 * '-')
             if "meta_value" in old_vals:
                 old_vals["meta_value"] = old_vals["meta_value"][0:50]
-            print("OLD:")
-            print(old_vals)
-            print(80 * '=')
+            self._debug_print("OLD:")
+            self._debug_print(old_vals)
+            self._debug_print(80 * '=')
 
     def _append_insert_vals(self, insert_vals: Dict[str, str]) -> RowData:
         """Updates the PK, if necessary, and appends the record to the add list."""
-        if self.are_copying:
+        if self.are_copying or not self.dst_table.has_autoinc_column():
             _, old_pk_val = self._get_old_pk_val(insert_vals)
             rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
         else:
@@ -207,6 +225,10 @@ old: {old_pk_val}, new: {new_pk_val}")
         msg = ""
         if len(src_item.pk) > 1:
             print(f"*** multi-column PK: {src_item.pk}")
+
+        if not self.src_table.has_autoinc_column():
+            msg = "No auto-increment on this table"
+            return do_update, maybe_update, msg
 
         # Here is where it might be good to know the autoinc_val
         # when the staging tables were created.

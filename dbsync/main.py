@@ -70,17 +70,26 @@ def get_args():
     argparser.add_argument(
         "-o", "--output",
         help="The filename for the SQL output",
-        default=settings.output_file)
+        default=settings.output_file
+    )
     argparser.add_argument(
         "-q", "--quiet",
         help="Suppresses output to stdout",
         default=False,
-        action="store_true")
+        action="store_true"
+    )
+    argparser.add_argument(
+        "--debug",
+        help="Print voluminous output about what is going on.",
+        default=False,
+        action="store_true"
+    )
     argparser.add_argument(
         "--profile",
         help="Run the program with cProfile",
         default=False,
-        action="store_true")
+        action="store_true"
+    )
 
     args = argparser.parse_args()
 
@@ -96,13 +105,14 @@ def get_args():
     if only_tables:
         tables = [settings.get_base_table_name(t) for t in args.only.replace(" ", "").split(",")]
         settings.included_tables += tables
-# default_sync_action
+
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.default_sync_action = SyncActions[args.default_action]
     settings.output_file = args.output
     settings.verify_mode = args.verify
     settings.verbose_mode = not args.quiet
+    settings.debug_mode = args.debug and settings.verbose_mode
     Settings.obj(settings)
     if not args.quiet:
         if args.verify:
@@ -115,23 +125,25 @@ def get_args():
         print("  output file  :", args.output)
         if only_tables:
             print("   only tables :", tables)
-    return (args.filename, args.quiet, args.highwater, args.split, args.profile)
+    return (args.filename, args.highwater, args.split, args.profile)
 
 
 def main():
-    filename, quiet, highwater, split, profile = get_args()
+    filename, highwater, split, profile = get_args()
     if split:
         do_split(filename)
+    elif highwater:
+        do_highwater(filename)
     elif profile:
         with cProfile.Profile() as prof:
-            do_comparison(filename, quiet, highwater)
+            do_comparison(filename)
             prof.print_stats(sort=SortKey.CUMULATIVE)
     else:
-        do_comparison(filename, quiet, highwater)
+        do_comparison(filename)
     return 0
 
 
-def do_comparison(filename: str, quiet=True, highwater=False) -> None:
+def do_comparison(filename: str) -> None:
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
@@ -141,19 +153,25 @@ def do_comparison(filename: str, quiet=True, highwater=False) -> None:
     repo.post_process()
     time3 = time.time()
     c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
-    if highwater:
-        c.write_high_water_marks()
-    else:
-        c.compare()
+    c.compare()
     time4 = time.time()
 
-    if not quiet:
+    if Settings.obj().verbose_mode:
         print("Timing:")
         print("  Read and split file : %.2f" % (time1 - time0))
         print("  Process statements  : %.2f" % (time2 - time1))
         print("  Post-Processing     : %.2f" % (time3 - time2))
         print("  Compare and output  : %.2f" % (time4 - time3))
         print("  Total               : %.2f" % (time4 - time0))
+
+
+def do_highwater(filename: str) -> None:
+    with open(filename, "r", encoding="utf8") as f:
+        text_l = sqlparse.split(f.read())
+    repo = process_statements(text_l, Settings.obj().db_name)
+    repo.post_process()
+    c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
+    c.write_high_water_marks()
 
 
 def do_split(filename: str) -> None:

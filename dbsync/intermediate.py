@@ -206,12 +206,16 @@ class Table(Intermediate, NameMixin):
 
     def _get_autoinc_column(self) -> Column | None:
         autoinc_cols = [c for c in self.columns if c.auto_inc]
-        if len(autoinc_cols) == 0:
-            return None
-        elif len(autoinc_cols) == 1:
+        if len(autoinc_cols) == 1:
             return autoinc_cols[0]
         else:
-            raise DbSyncCompareException("Multiple autoinc columns found")
+            quantity = "no" if len(autoinc_cols) == 0 else "multiple"
+            msg = f"Table {self.name} has {quantity} autoinc column(s)"
+            raise DbSyncCompareException(msg)
+
+    def has_autoinc_column(self) -> bool:
+        autoinc_cols = [c for c in self.columns if c.auto_inc]
+        return len(autoinc_cols) > 0
 
     def get_autoinc_val(self) -> int:
         autoinc_col = self._get_autoinc_column()

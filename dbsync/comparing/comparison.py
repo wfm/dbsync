@@ -11,6 +11,7 @@ from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.compare_insert import CompareInsert
 from dbsync.comparing.insert_diffs import InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
+from dbsync.exceptions import DbSyncCompareException
 from dbsync.keyzip import keyzip
 from dbsync.settings import Settings, SyncActions
 
@@ -186,6 +187,7 @@ src: {fk.src_table}.{fk.src_column}, dst: {fk.dst_table}.{fk.dst_column}")
 
     def compare(self):
         # The only thing we output besides insert and update are a few set statements
+        # that occur before the first table definition.
         for statement in self.repo:
             if isinstance(statement, IM.Table) or isinstance(statement, IM.Insert):
                 break
@@ -193,7 +195,11 @@ src: {fk.src_table}.{fk.src_column}, dst: {fk.dst_table}.{fk.dst_column}")
                 self._output_statement(statement)
 
         for table_name in self.repo.get_ordered_tables():
-            self._output_table(self.repo.get_table(table_name))
+            try:
+                self._output_table(self.repo.get_table(table_name))
+            except DbSyncCompareException:
+                self.repo.dump_everything(table_name)
+                raise
 
     def write_high_water_marks(self):
         if self.filename is None:

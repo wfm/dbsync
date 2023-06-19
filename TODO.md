@@ -24,7 +24,7 @@
 * Prevent SQL injection?
 * Generalize the state machine code
 
-#DONE
+# DONE
 * Compare stuff that is being updated
 * Test with local MySQL
 * Sort tables with unique keys by that key before comparing them
@@ -61,107 +61,7 @@ astra-child/woocommerce/single-product/product-image.php version 3.5.1 is out of
 
 https://woocommerce.com/document/fix-outdated-templates-woocommerce/
 
---------
 
+-- ALTER TABLE `staging_NhU_yoast_indexable_hierarchy`
+--   ADD PRIMARY KEY (`indexable_id`,`ancestor_id`),
 
-Better idea: sort by unique key 
------------
-
-9587, 442, '_elementor_css', 'a:6:{s:4:\"time\...	9411, 442, '_elementor_css', 'a:6:{s:4:\"time\...
-The data for the above is different
-
-===========
-
-    def tuplify(self, x):
-        if x is None:
-            return None
-        elif not isinstance(x, list) or len(x) == 0:
-            raise DbSyncCompareException(f"Bad data in tuplify: \"{x}\"")
-        elif len(x) == 1:
-            return x[0]
-        else:
-            return tuple(x)
-
-    def appears_later(self, src_item: InsertRecord) -> bool:
-        if self.has_unique_key:
-            if self.uniq2key is None:
-                self._get_unique_column_key_lookup()
-            key = self.uniq2key.get(src_item.unique_vals)
-            result = key is not None and key > src_item.key
-            return result
-        return False
-
-    def _get_unique_column_key_lookup(self) -> None:
-        if self.has_unique_key and self.uniq2key is None:
-            unique_list = [self.tuplify(self.get_unique_vals(v)) for v in self.values]
-            key_list = [self.get_key(v) for v in self.values]
-            self.uniq2key = dict(zip(unique_list, key_list, strict=True))
-        return None
-
-Tables without timestamps that need updating
-staging_NhU_postmeta
-staging_NhU_termmeta
-staging_NhU_term_taxonomy
-staging_NhU_usermeta
-staging_NhU_wc_product_meta_lookup
-staging_NhU_woocommerce_sessions
-
-Check of dbsync run:
-MERGE table NhU_postmeta
-Updating table staging_NhU_postmeta
-  Inserting 111 rows
-
-MERGE table NhU_usermeta
-Updating table staging_NhU_usermeta
-  Inserting 20 rows
-
-SKIP table NhU_wpforms_payment_meta by DEFAULT
-SKIP table NhU_wpforms_payments by DEFAULT
-
-
---only NhU_postmeta,NhU_usermeta
-
-
-Error Code: 1062. Duplicate entry '9331' for key 'staging_nhu_postmeta.PRIMARY'
-Error Code: 1100. Table 'NhU_postmeta' was not locked with LOCK TABLES
-
-/*!40000 ALTER TABLE `staging_NhU_postmeta` ENABLE KEYS */;
-UNLOCK TABLES;
-
-Error Code: 1064. You have an error in your SQL syntax; check the manual that corresponds to your MySQL server version for the right syntax to use near '9331' at line 1
-==============
-
-    def get_ordered_tables(self) -> List[str]:
-        def keyfunc(fk: ForeignKey) -> Tuple[str, str]:
-            return fk.src_table, fk.src_column
-
-        accumulator = {}
-        fks = Settings.obj().foreign_keys
-        fks.sort(key=keyfunc)
-
-        def find_fk(key: Tuple[str, str]) -> ForeignKey | None:
-            idx = bisect_left(fks, key, key=keyfunc)
-            if idx != len(fks) and key == keyfunc(fks[idx]):
-                return fks[idx]
-            return None
-
-        def accumulate(fk: ForeignKey, level: int = 0):
-            print(f"accumulate {fk} ({level})")
-            if fk.dst_table in accumulator:
-                accumulator[fk.dst_table] += 1
-            else:
-                accumulator[fk.dst_table] = 1
-
-            if fk.src_table != fk.dst_table:
-                next_fk = find_fk((fk.dst_table, fk.dst_column))
-                if next_fk is not None:
-                    accumulate(next_fk, level + 1)
-
-        for fk in fks:
-            accumulate(fk)
-
-        table_names = [Settings.obj().get_base_table_name(x)
-                       for x in self.tables.keys()
-                       if Settings.obj().is_src_table(x)]
-        table_names.sort(reverse=True, key=lambda x: accumulator[x] if x in accumulator else 0)
-        return [Settings.obj().get_src_table_name_from_base_name(x) for x in table_names]

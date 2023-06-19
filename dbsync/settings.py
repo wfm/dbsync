@@ -223,7 +223,9 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         # Only some of the Woocommerce tables are documented
         # See: https://github.com/woocommerce/woocommerce/wiki/Database-Description
         # I am only including those for now
-        ForeignKey("wc_download_log", "permission_id", "woocommerce_downloadable_product_permissions", "permission_id"),
+        ForeignKey(
+            "wc_download_log", "permission_id",
+            "woocommerce_downloadable_product_permissions", "permission_id"),
         ForeignKey("wc_download_log", "user_id", "users", "ID"),
         ForeignKey("wc_webhooks", "user_id", "users", "ID"),
         ForeignKey("woocommerce_api_keys", "user_id", "users", "ID"),
@@ -232,13 +234,24 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "user_id", "users", "ID"),
-        ForeignKey("woocommerce_order_itemmeta", "order_item_id", "woocommerce_order_items", "order_item_id"),
+        ForeignKey(
+            "woocommerce_order_itemmeta", "order_item_id",
+            "woocommerce_order_items", "order_item_id"),
         ForeignKey("woocommerce_order_items", "order_id", "", ""),
-        ForeignKey("woocommerce_payment_tokenmeta", "payment_token_id", "woocommerce_payment_tokens", "token_id"),
+        ForeignKey(
+            "woocommerce_payment_tokenmeta", "payment_token_id",
+            "woocommerce_payment_tokens", "token_id"),
         ForeignKey("woocommerce_payment_tokens", "user_id", "users", "ID"),
-        ForeignKey("woocommerce_shipping_zone_locations", "zone_id", "woocommerce_shipping_zones", "zone_id"),
-        ForeignKey("woocommerce_shipping_zone_methods", "zone_id", "woocommerce_shipping_zones", "zone_id"),
-        ForeignKey("woocommerce_tax_rate_locations", "tax_rate_id", "woocommerce_tax_rates", "tax_rate_id"),
+        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey(
+            "woocommerce_shipping_zone_locations", "zone_id",
+            "woocommerce_shipping_zones", "zone_id"),
+        ForeignKey(
+            "woocommerce_shipping_zone_methods", "zone_id",
+            "woocommerce_shipping_zones", "zone_id"),
+        ForeignKey(
+            "woocommerce_tax_rate_locations", "tax_rate_id",
+            "woocommerce_tax_rates", "tax_rate_id"),
         # I left out wpforms_ tables for now
         ForeignKey("yoast_indexable", "object_id", "posts", "ID"),
         ForeignKey("yoast_indexable", "author_id", "users", "ID"),
@@ -264,7 +277,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "lockdowns": {"action": SyncActions.MERGE},
         "login_fails": {"action": SyncActions.MERGE},
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
-        "options": {"action": SyncActions.SKIP},
+        "options": {"action": SyncActions.MERGE},       # was SKIP
         "postmeta": {
             "action": SyncActions.MERGE,
             "synthetic_unique_key": ["post_id", "meta_key"]
@@ -276,14 +289,14 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
                 "guid": alter_site_url
             }
         },
-        "sib_model_forms": {"action": SyncActions.SKIP},
+        "sib_model_forms": {"action": SyncActions.MERGE},       # was SKIP
         "sib_model_users": {"action": SyncActions.MERGE},
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
         "termmeta": {"action": SyncActions.MERGE},
-        "terms": {"action": SyncActions.SKIP},
+        "terms": {"action": SyncActions.MERGE},       # was SKIP
         "term_relationships": {"action": SyncActions.MERGE},
-        "term_taxonomy": {"action": SyncActions.SKIP},
+        "term_taxonomy": {"action": SyncActions.MERGE},       # was SKIP
         "usermeta": {
             "action": SyncActions.MERGE,
             "synthetic_unique_key": ["user_id", "meta_key"],
@@ -293,12 +306,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             }
         },
         "users": {"action": SyncActions.MERGE},
-        "wc_admin_notes": {"action": SyncActions.SKIP},
+        "wc_admin_notes": {"action": SyncActions.MERGE},       # was SKIP
         "wc_admin_note_actions": {
             "action": SyncActions.SKIP,
             "synthetic_unique_key": ["note_id", "name"]
         },
-        "wc_category_lookup": {"action": SyncActions.SKIP},
+        "wc_category_lookup": {"action": SyncActions.MERGE},       # was SKIP
         "wc_customer_lookup": {"action": SyncActions.COPY},
         "wc_download_log": {"action": SyncActions.MERGE},
         "wc_order_coupon_lookup": {"action": SyncActions.MERGE},
@@ -333,10 +346,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "wpmailsmtp_debug_events": {"action": SyncActions.MERGE},
         "wpmailsmtp_tasks_meta": {"action": SyncActions.MERGE},
         "yoast_indexable": {"action": SyncActions.MERGE},
-        "yoast_indexable_hierarchy": {"action": SyncActions.SKIP},
+        "yoast_indexable_hierarchy": {"action": SyncActions.MERGE},       # was SKIP
         "yoast_migrations": {"action": SyncActions.MERGE},
-        "yoast_primary_term": {"action": SyncActions.SKIP},
-        "yoast_seo_links": {"action": SyncActions.SKIP},
+        "yoast_primary_term": {"action": SyncActions.MERGE},       # was SKIP
+        "yoast_seo_links": {"action": SyncActions.MERGE},       # was SKIP
     }
 
     default_sync_action: SyncActions = SyncActions.DEFAULT
@@ -366,6 +379,8 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
     # prints to stdout if true:
     verbose_mode: bool = False
+    # prints more stuff if true
+    debug_mode: bool = False
 
     # don't copy tables if true. used when "verifying" previous run:
     verify_mode: bool = False
