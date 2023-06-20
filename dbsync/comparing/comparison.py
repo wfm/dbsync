@@ -29,6 +29,7 @@ class Comparison:
         elif filename is not None:
             self.fd = open(filename, mode="w", encoding="utf-8")
             self._write_sql(f"-- dbsync started at {datetime.now()}")
+            print(f"Comparison started at {datetime.now()}")
         else:
             self.fd = None
 
@@ -127,7 +128,8 @@ class Comparison:
             ci = CompareInsert(p[0], src, p[1], dst, truncate)
             diffs = ci.compare()
             self._add_to_insert_diffs(dst, diffs)
-            self._patch_foreign_keys(diffs, dst)
+            self._patch_foreign_keys(diffs, dst, ci)
+            ci.close()
             sql_text = diffs.generate_sql()
             if len(sql_text) > 0:
                 self._write_sql(f"\n\n-- Prod table {src.name}")
@@ -153,16 +155,16 @@ class Comparison:
                     self._write_sql(dst.enable_autoinc(autoinc_val=new_autoinc))
 
     # TODO what happens with multi-column keys?
-    def _patch_foreign_keys(self, diffs: InsertDiffs, dst: IM.Table) -> None:
+    def _patch_foreign_keys(self, diffs: InsertDiffs, dst: IM.Table, ci: CompareInsert) -> None:
         fks = Settings.obj().get_foreign_keys(dst.name)
         for fk in fks:
             sync_action = Settings.obj().get_table_action_from_base_name(fk.dst_table)
             if sync_action == SyncActions.SKIP:
                 continue
 
-            self._print_remark(f"  Patching {fk}")
+            ci.debug_print(f"  Patching {fk}")
             if len(fk.dst_table) == 0 or len(fk.dst_column) == 0:
-                self._print_remark(f"    The FK info for {dst.name} is incomplete - \
+                ci.debug_print(f"    The FK info for {dst.name} is incomplete - \
 skipping key patching")
                 return
 
@@ -174,10 +176,13 @@ skipping key patching")
             for add in diffs.additions:
                 try:
                     old_key_val = add.insert_vals[fk.src_column]
-                    if old_key_val is not None and int(old_key_val) > 0:
+                    # TODO i thought we were replacing NULL with None
+                    if old_key_val is not None and \
+                            old_key_val.casefold != "null" \
+                            and int(old_key_val) > 0:
                         new_key_val = fk_id.find_replacement_key(int(old_key_val))
                         if new_key_val != int(old_key_val):
-                            self._print_remark(
+                            ci.debug_print(
                                 f"    fk: {fk}, old: {old_key_val}, new: {new_key_val}")
                             add.insert_vals[fk.src_column] = str(new_key_val)
 

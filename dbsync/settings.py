@@ -237,7 +237,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey(
             "woocommerce_order_itemmeta", "order_item_id",
             "woocommerce_order_items", "order_item_id"),
-        ForeignKey("woocommerce_order_items", "order_id", "", ""),
+        ForeignKey("woocommerce_order_items", "order_id", "posts", "ID"),
         ForeignKey(
             "woocommerce_payment_tokenmeta", "payment_token_id",
             "woocommerce_payment_tokens", "token_id"),
@@ -289,14 +289,14 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
                 "guid": alter_site_url
             }
         },
-        "sib_model_forms": {"action": SyncActions.MERGE},       # was SKIP
+        "sib_model_forms": {"action": SyncActions.MERGE},           # was SKIP
         "sib_model_users": {"action": SyncActions.MERGE},
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
         "termmeta": {"action": SyncActions.MERGE},
-        "terms": {"action": SyncActions.MERGE},       # was SKIP
+        "terms": {"action": SyncActions.MERGE},                     # was SKIP
         "term_relationships": {"action": SyncActions.MERGE},
-        "term_taxonomy": {"action": SyncActions.MERGE},       # was SKIP
+        "term_taxonomy": {"action": SyncActions.MERGE},             # was SKIP
         "usermeta": {
             "action": SyncActions.MERGE,
             "synthetic_unique_key": ["user_id", "meta_key"],
@@ -306,12 +306,18 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             }
         },
         "users": {"action": SyncActions.MERGE},
-        "wc_admin_notes": {"action": SyncActions.MERGE},       # was SKIP
-        "wc_admin_note_actions": {
-            "action": SyncActions.SKIP,
-            "synthetic_unique_key": ["note_id", "name"]
+        "wc_admin_notes": {
+            "action": SyncActions.MERGE,                            # was SKIP
+            "synthetic_unique_key": ["name"]
         },
-        "wc_category_lookup": {"action": SyncActions.MERGE},       # was SKIP
+        "wc_admin_note_actions": {
+            "action": SyncActions.MERGE,                            # was SKIP
+            "synthetic_unique_key": ["name"],
+            "special_rules": {
+                "query": alter_site_url
+            }
+        },
+        "wc_category_lookup": {"action": SyncActions.MERGE},        # was SKIP
         "wc_customer_lookup": {"action": SyncActions.COPY},
         "wc_download_log": {"action": SyncActions.MERGE},
         "wc_order_coupon_lookup": {"action": SyncActions.MERGE},
@@ -346,10 +352,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "wpmailsmtp_debug_events": {"action": SyncActions.MERGE},
         "wpmailsmtp_tasks_meta": {"action": SyncActions.MERGE},
         "yoast_indexable": {"action": SyncActions.MERGE},
-        "yoast_indexable_hierarchy": {"action": SyncActions.MERGE},       # was SKIP
+        "yoast_indexable_hierarchy": {
+            "action": SyncActions.MERGE,        # was SKIP
+            "synthetic_primary_key": ["indexable_id"]
+        },
         "yoast_migrations": {"action": SyncActions.MERGE},
-        "yoast_primary_term": {"action": SyncActions.MERGE},       # was SKIP
-        "yoast_seo_links": {"action": SyncActions.MERGE},       # was SKIP
+        "yoast_primary_term": {"action": SyncActions.MERGE},        # was SKIP
+        "yoast_seo_links": {"action": SyncActions.MERGE},           # was SKIP
     }
 
     default_sync_action: SyncActions = SyncActions.DEFAULT
@@ -494,6 +503,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         if self.verify_mode and action == SyncActions.COPY:
             return SyncActions.SKIP
         return action
+
+    def get_synthetic_primary_key(self, table_name: str) -> List[str] | None:
+        """Returns the synthetic primary key (if any) for a table."""
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("synthetic_primary_key")
 
     def get_synthetic_unique_key(self, table_name: str) -> List[str] | None:
         """Returns the synthetic unique key (if any) for a table."""

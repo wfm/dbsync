@@ -1,6 +1,8 @@
 # TODO
 ## Urgent
-* PK errors with synthetic UK
+* Post 1738 was not copied/copied correctly
+* Safe mode updates
+* Do we want to allow updates to PK of tables compared by unique key? I think not...
 * Integration tests - in progress
 
 ## Medium-term
@@ -15,6 +17,7 @@
 * Use separate InsertRecord and UpdateRecord?
 * Linter errors in Github
 * After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
+* Should prolly use case0insensitive comparisons
 
 ## Future
 * Implement stage -> prod
@@ -25,6 +28,7 @@
 * Generalize the state machine code
 
 # DONE
+* PK errors with synthetic UK
 * Compare stuff that is being updated
 * Test with local MySQL
 * Sort tables with unique keys by that key before comparing them
@@ -68,3 +72,10 @@ The code assumes that a table has one PK column and that column has auto-increme
 -- ALTER TABLE `staging_NhU_yoast_indexable_hierarchy`
 --   ADD PRIMARY KEY (`indexable_id`,`ancestor_id`),
 
+05:49:59
+
+UPDATE `staging_NhU_wc_admin_note_actions` SET `query`='https://maryjoyart.com/staging/1617/wp-admin/post.php?post=635&action=edit' WHERE `name`='notify-refund-returns-page'	
+
+Error Code: 1175. You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column.  To disable safe mode, toggle the option in Preferences -> SQL Editor and reconnect.
+
+0.00079 sec

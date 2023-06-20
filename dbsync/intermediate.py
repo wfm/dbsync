@@ -30,7 +30,9 @@ class NameMixin:
 @dataclass
 class Intermediate:
     """Base class for the rest of the classes in this module"""
-    pass
+    def _print_verbose(self, text) -> None:
+        if Settings.obj().verbose_mode:
+            print(text)
 
 
 @dataclass
@@ -115,6 +117,12 @@ class Table(Intermediate, NameMixin):
         self.timestamp_columns = Settings.obj().get_timestamp_cols(self.name)
         self.use_time_based_comparison = Settings.obj().get_use_time_based_comparison(self.name)
 
+        primary_cols = Settings.obj().get_synthetic_primary_key(self.name)
+        if primary_cols is not None:
+            columns = [KeyColumn(name, None) for name in primary_cols]
+            primary = Key(self.name, columns, is_primary=True)
+            self.append_key(primary)
+
         unique_cols = Settings.obj().get_synthetic_unique_key(self.name)
         if unique_cols is not None:
             existing = self.get_unique_key()
@@ -138,6 +146,9 @@ class Table(Intermediate, NameMixin):
         """Returns the unique key, if any"""
         keys = [key for key in self.keys if key.is_primary]
         return self._return_key(keys, "primary")
+    
+    def has_primary_key(self) -> bool:
+        return self.get_primary_key() is not None
 
     def get_unique_key(self) -> Key | None:
         """Returns the unique key, if any"""
@@ -172,7 +183,14 @@ class Table(Intermediate, NameMixin):
         return None
 
     def append_key(self, key: Key) -> None:
-        self.keys.append(key)
+        if key.is_primary and self.has_primary_key():
+            self._print_verbose(f"Ignoring primary key in SQL. \
+Table {self.name} already has a (possibly synthetic) primary key.")
+        elif key.is_unique and self.has_unique_key():
+            self._print_verbose(f"Ignoring unique key in SQL. \
+Table {self.name} already has a (possibly synthetic) unique key.")
+        else:
+            self.keys.append(key)
 
     def get_column_names(self) -> List[str]:
         return [c.name for c in self.columns]

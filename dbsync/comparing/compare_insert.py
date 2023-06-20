@@ -52,6 +52,10 @@ class CompareInsert:
         self.debug_mode = Settings.obj().debug_mode
         self.debug_file = self._create_debug_file()
 
+        if self.debug_mode:
+            self.debug_print(f"Comparing insert for {self.dst_table.name}, \
+key cols = {src.key_column_names}")
+
         if self.src is not None:
             self.srcgen = CompareInsert.Generator(self.src)
 
@@ -75,13 +79,19 @@ class CompareInsert:
             return debug_file
         return None
 
-    def _debug_print(self, obj: Any) -> None:
+    def debug_print(self, obj: Any) -> None:
         if self.debug_mode:
             self.debug_file.write(str(obj))
+            self.debug_file.write("\n")
 
     def _verbose_print(self, msg):
         if Settings.obj().verbose_mode:
             print(msg)
+
+    def close(self):
+        if self.debug_file is not None:
+            self.debug_file.close()
+            self.debug_file = None
 
     def compare(self):
         if self.src is None:
@@ -99,16 +109,19 @@ class CompareInsert:
                         dst_key = "None"
                     else:
                         dst_key = dst_item.key
-                    self._debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
-                    # hwm = Settings.obj().get_high_water(self.src_table.name)
-                    # print(f"  hwm: {hwm}, pk: {src_item.pk}")
+                    self.debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
 
                 self._append_insert_vals(src_item.insert_vals)
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
                 if self.debug_mode:
-                    self._debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
+                    self.debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
+                    hwm = Settings.obj().get_high_water(self.src_table.name)
+                    dst_pk_val = int(dst_item.pk[0])
+                    if dst_pk_val < hwm:
+                        msg = f"Possible delete, dst pk: {dst_pk_val}, hwm: {hwm}"
+                        self.debug_print(msg)
 
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
@@ -122,7 +135,6 @@ class CompareInsert:
                 # the keys are the same but the data is different
                 # use the timestamp columns to determine which rows to update
                 self._compare_update(src_item, dst_item)
-
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
 
@@ -147,22 +159,20 @@ class CompareInsert:
                         src_item.pk, src_item.is_unique,
                         msg))
 
-        if self.debug_mode:
-            self._debug_print(f"{'U' if updated else 'X'} {src_item.key}  {dst_item.key} => {cols}")
-            self._debug_print(msg)
+        if self.debug_mode and updated:
+            self.debug_print(f"{'U' if updated else 'X'} {src_item.key}  {dst_item.key} => {cols}")
+            self.debug_print(msg)
 
             if not updated:
                 update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
-            if "meta_value" in update_vals:
-                update_vals["meta_value"] = update_vals["meta_value"][0:50]
-            self._debug_print("NEW:")
-            self._debug_print(update_vals)
-            self._debug_print(80 * '-')
-            if "meta_value" in old_vals:
-                old_vals["meta_value"] = old_vals["meta_value"][0:50]
-            self._debug_print("OLD:")
-            self._debug_print(old_vals)
-            self._debug_print(80 * '=')
+            update_print = {k: v[:50] for k, v in update_vals.items()}
+            self.debug_print("NEW:")
+            self.debug_print(update_print)
+            self.debug_print(80 * '-')
+            old_print = {k: v[:50] for k, v in old_vals.items()}
+            self.debug_print("OLD:")
+            self.debug_print(old_print)
+            self.debug_print(80 * '=')
 
     def _append_insert_vals(self, insert_vals: Dict[str, str]) -> RowData:
         """Updates the PK, if necessary, and appends the record to the add list."""
@@ -189,7 +199,7 @@ class CompareInsert:
         new_pk_val = str(self.dst_table.next_autoinc_val())
         pk_name, old_pk_val = self._get_old_pk_val(insert_vals)
         insert_vals[pk_name] = new_pk_val
-        self._verbose_print(f"  Assigned new PK to column {pk_name}, \
+        self.debug_print(f"  Assigned new PK to column {pk_name}, \
 old: {old_pk_val}, new: {new_pk_val}")
 
         # Update URLs with the id in them
@@ -200,7 +210,6 @@ old: {old_pk_val}, new: {new_pk_val}")
         for k, v in insert_vals.items():
             new_v, num = pk_re.subn(repl, v)
             if num > 0:
-                self._verbose_print(f"    Updated PK {num} times in column {k}")
                 insert_vals[k] = new_v
         return RowData(insert_vals, int(new_pk_val), int(old_pk_val))
 
@@ -253,7 +262,7 @@ old: {old_pk_val}, new: {new_pk_val}")
         if self.debug_mode:
             extra = f" - hwm: {hwm}, src: {[src_end, src_pk_val]} > \
 dst: {[dst_end, dst_pk_val]} => {do_update}"
-            self._verbose_print(f"  comparing PKs {extra}")
+            self.debug_print(f"  comparing PKs {extra}")
             msg += extra
         return do_update, maybe_update, msg
 
