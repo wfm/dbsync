@@ -71,7 +71,8 @@ class InsertDiffs:
         sql.append(f"UPDATE `{self.dst_table.name}`")
         assignments = [f"`{col}`={val}" for col, val in record.update_vals.items()]
         sql.append(f"SET {', '.join(assignments)}")
-        conditions = [f"`{col}`={val}" for col, val in record.key_vals.items()]
+        # always use PK in update statements
+        conditions = [f"`{col}`={val}" for col, val in record.pk_vals.items()]
         sql.append(f"WHERE {' AND '.join(conditions)};")
         return sql
 

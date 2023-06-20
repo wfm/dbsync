@@ -1,9 +1,12 @@
 # TODO
 ## Urgent
-* Post 1738 was not copied/copied correctly
+* Post 1738 was not copied/copied correctly - I think it got a new 
 * Safe mode updates
 * Do we want to allow updates to PK of tables compared by unique key? I think not...
 * Integration tests - in progress
+* Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
+- For _posts, should we reuse IDs and just update the post date?
+- Should we "infill" PKs?
 
 ## Medium-term
 * use ON DUPLICATE KEY UPDATE?
@@ -79,3 +82,26 @@ UPDATE `staging_NhU_wc_admin_note_actions` SET `query`='https://maryjoyart.com/s
 Error Code: 1175. You are using safe update mode and you tried to update a table without a WHERE that uses a KEY column.  To disable safe mode, toggle the option in Preferences -> SQL Editor and reconnect.
 
 0.00079 sec
+
+
+ALTER TABLE `NhU_term_relationships`
+  ADD PRIMARY KEY (`object_id`,`term_taxonomy_id`),
+
+ALTER TABLE `NhU_wc_category_lookup`
+  ADD PRIMARY KEY (`category_tree_id`,`category_id`);
+
+ALTER TABLE `NhU_wc_order_coupon_lookup`
+  ADD PRIMARY KEY (`order_id`,`coupon_id`),
+
+ALTER TABLE `NhU_wc_order_tax_lookup`
+  ADD PRIMARY KEY (`order_id`,`tax_rate_id`),
+
+ALTER TABLE `NhU_wc_product_attributes_lookup`
+  ADD PRIMARY KEY (`product_or_parent_id`,`term_id`,`product_id`,`taxonomy`),
+
+ALTER TABLE `NhU_wc_reserved_stock`
+  ADD PRIMARY KEY (`order_id`,`product_id`);
+
+ALTER TABLE `NhU_yoast_indexable_hierarchy`
+  ADD PRIMARY KEY (`indexable_id`,`ancestor_id`),
+

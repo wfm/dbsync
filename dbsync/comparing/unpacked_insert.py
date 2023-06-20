@@ -17,6 +17,7 @@ class InsertRecord:
     key_vals: Dict[str, str]                # key,value pairs of (unique|primary) keys
     update_vals: Dict[str, str]             # key,value pairs of non-key (unique|primary) columns
     pk: List[str]                           # primary key values
+    pk_vals: Dict[str, str]                 # key,value pairs of primary keys
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
 
@@ -174,6 +175,9 @@ class UnpackedInsert:
         nonkey_vals = self.get_non_key(v)
         return dict(zip(self.nonkey_column_names, nonkey_vals, strict=True))
 
+    def _get_pk_values_dict(self, pk: List[str]) -> Dict[str, str]:
+        return dict(zip(self.pk_cols, pk, strict=True))
+
     # TODO maybe use __iter__ ????
     def values_gen(self) -> Iterator[InsertRecord]:
         """Generator yielding keys and values from the insert statement"""
@@ -182,4 +186,5 @@ class UnpackedInsert:
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
             pk = self.apply_getter(v, self._pk_getter)
-            yield InsertRecord(key, v, kv, upd, pk, self.is_unique)
+            pk_vals = self._get_pk_values_dict(pk)
+            yield InsertRecord(key, v, kv, upd, pk, pk_vals, self.is_unique)

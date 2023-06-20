@@ -1,5 +1,6 @@
 """Compares data between the prod and staging databases"""
 
+from bisect import bisect_left
 from io import TextIOWrapper
 import os
 import re
@@ -49,6 +50,13 @@ class CompareInsert:
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
+        self._verbose_print(f"Table {self.dst_table.name} has PKs: {self.dst_table.get_primary_key()}")
+
+        self.dst_pks = []
+        if self.dst is not None:
+            self.dst_pks = [item.pk for item in self.dst.values_gen()]
+            self.dst_pks.sort()
+
         self.debug_mode = Settings.obj().debug_mode
         self.debug_file = self._create_debug_file()
 
@@ -92,6 +100,11 @@ key cols = {src.key_column_names}")
         if self.debug_file is not None:
             self.debug_file.close()
             self.debug_file = None
+
+    def _has_primary_key(self, pk) -> bool:
+        to_search = pk if isinstance(pk, list) else [pk]
+        idx = bisect_left(self.dst_pks, to_search)
+        return idx != len(self.dst_pks) and self.dst_pks[idx] == to_search
 
     def compare(self):
         if self.src is None:
@@ -156,7 +169,9 @@ key cols = {src.key_column_names}")
                         None,
                         src_item.key_vals,
                         update_vals,
-                        src_item.pk, src_item.is_unique,
+                        src_item.pk,
+                        src_item.pk_vals,
+                        src_item.is_unique,
                         msg))
 
         if self.debug_mode and updated:
@@ -176,31 +191,39 @@ key cols = {src.key_column_names}")
 
     def _append_insert_vals(self, insert_vals: Dict[str, str]) -> RowData:
         """Updates the PK, if necessary, and appends the record to the add list."""
+        _, old_pk_val = self._get_old_pk_val(insert_vals)
         if self.are_copying:
-            _, old_pk_val = self._get_old_pk_val(insert_vals)
             rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
         elif not self.dst_table.has_autoinc_column():
             rd = RowData(insert_vals, -1, -1)
+        elif self._has_primary_key(old_pk_val):
+            rd = self._assign_new_pk(insert_vals)
         else:
-            rd = self._update_pk(insert_vals)
+            rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
+            msg = f"  Reusing PK: {old_pk_val}"
+            self._verbose_print(msg)
+            self.debug_print(msg)
 
         self.add.append(rd)
 
     def _get_old_pk_val(self, insert_vals: Dict[str, str]) -> Tuple[str, str]:
         """Returns the current PK in a row to be inserted"""
         pk_name = self.dst_table.get_primary_key().get_column_names()
+        # TODO: some tables have compound PKs
         assert len(pk_name) == 1, "Expected 1 PK column name"
         pk_name = pk_name[0]
         old_pk_val = insert_vals[pk_name]
         return pk_name, old_pk_val
 
-    def _update_pk(self, insert_vals: Dict[str, str]) -> RowData:
+    def _assign_new_pk(self, insert_vals: Dict[str, str]) -> RowData:
         """Assigns a new PK value to an inserted record"""
         new_pk_val = str(self.dst_table.next_autoinc_val())
         pk_name, old_pk_val = self._get_old_pk_val(insert_vals)
         insert_vals[pk_name] = new_pk_val
-        self.debug_print(f"  Assigned new PK to column {pk_name}, \
-old: {old_pk_val}, new: {new_pk_val}")
+        msg = f"  Assigned new PK to column {pk_name}, \
+old: {old_pk_val}, new: {new_pk_val}"
+        self._verbose_print(msg)
+        self.debug_print(msg)
 
         # Update URLs with the id in them
         # e.g., https://maryjoyart.com/?p=1712
@@ -293,12 +316,6 @@ dst: {[dst_end, dst_pk_val]} => {do_update}"
     def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):
         """Returns a subset of the data with the specified columns"""
         return [vals[col] for col in cols if col in vals]
-        # This could be a comprehension:
-        # result = []
-        # for col in cols:
-        #     if col in vals:
-        #         result.append(vals[col])
-        # return result
 
     def _update_only_necessary_cols(self,
                                     src_item: InsertRecord,
