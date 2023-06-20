@@ -1,14 +1,14 @@
 """Compares data between the prod and staging databases"""
 
-from bisect import bisect_left
-from io import TextIOWrapper
 import os
 import re
-from typing import Any, List, Dict, Tuple
+from bisect import bisect_left
+from io import TextIOWrapper
+from typing import Any, Dict, List, Tuple
 
-from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync import intermediate as IM
-from dbsync.comparing.unpacked_insert import UnpackedInsert, InsertRecord
+from dbsync.comparing.insert_diffs import InsertDiffs, RowData
+from dbsync.comparing.unpacked_insert import InsertRecord, UnpackedInsert
 from dbsync.settings import Settings
 
 
@@ -50,12 +50,13 @@ class CompareInsert:
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
-        self._verbose_print(f"Table {self.dst_table.name} has PKs: {self.dst_table.get_primary_key()}")
+        self._verbose_print(f"    PKs: {self.dst_table.get_primary_key()}")
 
-        self.dst_pks = []
+        self.dst_autoinc = []
         if self.dst is not None:
-            self.dst_pks = [item.pk for item in self.dst.values_gen()]
-            self.dst_pks.sort()
+            self.dst_autoinc = \
+                [item.autoinc for item in self.dst.values_gen() if item.autoinc is not None]
+            self.dst_autoinc.sort()
 
         self.debug_mode = Settings.obj().debug_mode
         self.debug_file = self._create_debug_file()
@@ -101,10 +102,15 @@ key cols = {src.key_column_names}")
             self.debug_file.close()
             self.debug_file = None
 
-    def _has_primary_key(self, pk) -> bool:
-        to_search = pk if isinstance(pk, list) else [pk]
-        idx = bisect_left(self.dst_pks, to_search)
-        return idx != len(self.dst_pks) and self.dst_pks[idx] == to_search
+    def _has_autoinc_val(self, to_search: int) -> bool:
+        """Searches dst PKs to see if a PK is in use"""
+        idx = bisect_left(self.dst_autoinc, to_search)
+        return idx != len(self.dst_autoinc) and self.dst_autoinc[idx] == to_search
+
+    def _save_autoinc_val(self, to_save) -> None:
+        """Add the PK to the list of dst PKs"""
+        # The list is sorted, don't mess that up
+        self.dst_autoinc.append(to_save)
 
     def compare(self):
         if self.src is None:
@@ -171,6 +177,7 @@ key cols = {src.key_column_names}")
                         update_vals,
                         src_item.pk,
                         src_item.pk_vals,
+                        src_item.autoinc,
                         src_item.is_unique,
                         msg))
 
@@ -193,15 +200,14 @@ key cols = {src.key_column_names}")
         """Updates the PK, if necessary, and appends the record to the add list."""
         _, old_pk_val = self._get_old_pk_val(insert_vals)
         if self.are_copying:
-            rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
+            rd = RowData(insert_vals, old_pk_val, old_pk_val)
         elif not self.dst_table.has_autoinc_column():
             rd = RowData(insert_vals, -1, -1)
-        elif self._has_primary_key(old_pk_val):
+        elif self._has_autoinc_val(old_pk_val):
             rd = self._assign_new_pk(insert_vals)
         else:
-            rd = RowData(insert_vals, int(old_pk_val), int(old_pk_val))
+            rd = RowData(insert_vals, old_pk_val, old_pk_val)
             msg = f"  Reusing PK: {old_pk_val}"
-            self._verbose_print(msg)
             self.debug_print(msg)
 
         self.add.append(rd)
@@ -213,23 +219,23 @@ key cols = {src.key_column_names}")
         assert len(pk_name) == 1, "Expected 1 PK column name"
         pk_name = pk_name[0]
         old_pk_val = insert_vals[pk_name]
-        return pk_name, old_pk_val
+        return pk_name, int(old_pk_val)
 
     def _assign_new_pk(self, insert_vals: Dict[str, str]) -> RowData:
         """Assigns a new PK value to an inserted record"""
-        new_pk_val = str(self.dst_table.next_autoinc_val())
+        new_pk_val = self.dst_table.next_autoinc_val()
+        self._save_autoinc_val(new_pk_val)
         pk_name, old_pk_val = self._get_old_pk_val(insert_vals)
-        insert_vals[pk_name] = new_pk_val
+        insert_vals[pk_name] = str(new_pk_val)
         msg = f"  Assigned new PK to column {pk_name}, \
 old: {old_pk_val}, new: {new_pk_val}"
-        self._verbose_print(msg)
         self.debug_print(msg)
 
         # Update URLs with the id in them
         # e.g., https://maryjoyart.com/?p=1712
         # TODO use "special rules"
-        pk_re = re.compile(r"(([?&]|&#03f;|&#038;)\w+=)" + old_pk_val + r"\b", flags=re.IGNORECASE)
-        repl = r"\g<1>" + new_pk_val
+        pk_re = re.compile(r"(([?&]|&#03f;|&#038;)\w+=)" + str(old_pk_val) + r"\b", flags=re.IGNORECASE)
+        repl = r"\g<1>" + str(new_pk_val)
         for k, v in insert_vals.items():
             new_v, num = pk_re.subn(repl, v)
             if num > 0:

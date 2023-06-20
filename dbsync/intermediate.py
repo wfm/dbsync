@@ -231,6 +231,13 @@ Table {self.name} already has a (possibly synthetic) unique key.")
             msg = f"Table {self.name} has {quantity} autoinc column(s)"
             raise DbSyncCompareException(msg)
 
+    def get_autoinc_column_name(self) -> str | None:
+        autoinc_cols = [c for c in self.columns if c.auto_inc]
+        if len(autoinc_cols) == 1:
+            return autoinc_cols[0].name
+        else:
+            return None
+
     def has_autoinc_column(self) -> bool:
         autoinc_cols = [c for c in self.columns if c.auto_inc]
         return len(autoinc_cols) > 0

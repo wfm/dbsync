@@ -1,5 +1,6 @@
 """An easier-to-work-with representation of an insert statement"""
 
+import re
 from typing import List, Dict, Iterator
 from operator import itemgetter
 from dataclasses import dataclass, field
@@ -18,6 +19,7 @@ class InsertRecord:
     update_vals: Dict[str, str]             # key,value pairs of non-key (unique|primary) columns
     pk: List[str]                           # primary key values
     pk_vals: Dict[str, str]                 # key,value pairs of primary keys
+    autoinc: int | None                     # autoincrement column value
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
 
@@ -62,6 +64,8 @@ class UnpackedInsert:
             self._nonkey_getter = None
         else:
             self._nonkey_getter = itemgetter(*self.nonkey_column_names)
+
+        self.autoinc_column_name = table.get_autoinc_column_name()
 
     def __str__(self):
         return f"UnpackedInsert for {self.name}"
@@ -178,6 +182,13 @@ class UnpackedInsert:
     def _get_pk_values_dict(self, pk: List[str]) -> Dict[str, str]:
         return dict(zip(self.pk_cols, pk, strict=True))
 
+    def _get_autoinc_value(self, v: Dict[str, str]) -> int | None:
+        if self.autoinc_column_name is None:
+            return None
+        autoinc = v[self.autoinc_column_name]
+        autoinc = re.sub(r"^([\"'])(\d+)\1$", r"\2", autoinc)
+        return int(autoinc)
+
     # TODO maybe use __iter__ ????
     def values_gen(self) -> Iterator[InsertRecord]:
         """Generator yielding keys and values from the insert statement"""
@@ -187,4 +198,5 @@ class UnpackedInsert:
             upd = self._get_nonkey_values_dict(v)
             pk = self.apply_getter(v, self._pk_getter)
             pk_vals = self._get_pk_values_dict(pk)
-            yield InsertRecord(key, v, kv, upd, pk, pk_vals, self.is_unique)
+            autoinc = self._get_autoinc_value(v)
+            yield InsertRecord(key, v, kv, upd, pk, pk_vals, autoinc, self.is_unique)

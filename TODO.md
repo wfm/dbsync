@@ -1,12 +1,10 @@
 # TODO
 ## Urgent
-* Post 1738 was not copied/copied correctly - I think it got a new 
-* Safe mode updates
-* Do we want to allow updates to PK of tables compared by unique key? I think not...
 * Integration tests - in progress
 * Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
-- For _posts, should we reuse IDs and just update the post date?
-- Should we "infill" PKs?
+- Weird, ID is the PK
+* I've been conflating PK and auto-inc column. They're separate concepts.
+* Int columns are stored as strings and converted to int when needed. It's confusing.
 
 ## Medium-term
 * use ON DUPLICATE KEY UPDATE?
@@ -20,7 +18,7 @@
 * Use separate InsertRecord and UpdateRecord?
 * Linter errors in Github
 * After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
-* Should prolly use case0insensitive comparisons
+* Use case-insensitive comparisons
 
 ## Future
 * Implement stage -> prod
@@ -31,6 +29,13 @@
 * Generalize the state machine code
 
 # DONE
+* Post 1738 was not copied/copied correctly - I think it got a new 
+* Safe mode updates
+* Do we want to allow updates to PK of tables compared by unique key? I think not...
+- For _posts, should we reuse IDs and just update the post date?
+- Should we "infill" PKs?
+* Add FKs for rest of wc tables
+* Review which tables are copied.
 * PK errors with synthetic UK
 * Compare stuff that is being updated
 * Test with local MySQL
@@ -105,3 +110,6 @@ ALTER TABLE `NhU_wc_reserved_stock`
 ALTER TABLE `NhU_yoast_indexable_hierarchy`
   ADD PRIMARY KEY (`indexable_id`,`ancestor_id`),
 
+<strong>Your store requires a security update for the WooCommerce Stripe plugin</strong>. Please update the WooCommerce Stripe plugin immediately to address a potential vulnerability.
+
+Error Code: 1062. Duplicate entry '9420' for key 'staging_nhu_postmeta.PRIMARY'

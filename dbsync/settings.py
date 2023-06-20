@@ -222,17 +222,38 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("usermeta", "user_id", "users", "ID"),
         # Only some of the Woocommerce tables are documented
         # See: https://github.com/woocommerce/woocommerce/wiki/Database-Description
-        # I am only including those for now
+        # I guessed at the others
         ForeignKey(
             "wc_download_log", "permission_id",
             "woocommerce_downloadable_product_permissions", "permission_id"),
         ForeignKey("wc_download_log", "user_id", "users", "ID"),
         ForeignKey("wc_webhooks", "user_id", "users", "ID"),
+
+        ForeignKey("wc_admin_note_actions", "note_id", "wc_admin_notes", "note_id"),
+        ForeignKey("wc_customer_lookup", "user_id", "users", "ID"),
+        ForeignKey("wc_order_coupon_lookup", "order_id", "posts", "ID"),
+        ForeignKey("wc_order_product_lookup", "order_id", "posts", "ID"),
+        ForeignKey("wc_order_product_lookup", "product_id", "posts", "ID"),   # just a guess
+        # ForeignKey("wc_order_product_lookup", "variation_id", "", ""),        # ???
+        ForeignKey("wc_order_product_lookup", "customer_id", "wc_customer_lookup", "customer_id"),
+        ForeignKey("wc_order_stats", "order_id", "posts", "ID"),
+        ForeignKey("wc_order_stats", "parent_id", "wc_order_stats", "order_id"),
+        ForeignKey("wc_order_stats", "customer_id", "wc_customer_lookup", "customer_id"),
+        ForeignKey("wc_order_tax_lookup", "order_id", "posts", "ID"),
+        ForeignKey("wc_order_tax_lookup", "tax_rate_id", "woocommerce_tax_rates", "tax_rate_id"),
+        ForeignKey("wc_product_attributes_lookup", "product_id", "posts", "ID"),   # just a guess
+        # TODO this could be difficult to update:
+        ForeignKey("wc_product_attributes_lookup", "product_or_parent_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_product_attributes_lookup", "term_id", "terms", "term_id"),
+        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_reserved_stock", "order_id", "posts", "ID"),
+        ForeignKey("wc_reserved_stock", "product_id", "posts", "ID"),   # just a guess
+
         ForeignKey("woocommerce_api_keys", "user_id", "users", "ID"),
-        ForeignKey("woocommerce_downloadable_product_permissions", "download_id", "", ""),
-        ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "", ""),
-        ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "", ""),
-        ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
+        #ForeignKey("woocommerce_downloadable_product_permissions", "download_id", "", ""),
+        ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "posts", "ID"),
+        #ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "user_id", "users", "ID"),
         ForeignKey(
             "woocommerce_order_itemmeta", "order_item_id",
@@ -271,7 +292,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "ce4wp_abandoned_checkout": {"action": SyncActions.MERGE},
         "ce4wp_contacts": {"action": SyncActions.MERGE},
         "commentmeta": {"action": SyncActions.MERGE},
-        "comments": {"action": SyncActions.COPY},
+        "comments": {"action": SyncActions.MERGE},      # was COPY
         "e_events": {"action": SyncActions.MERGE},
         "links": {"action": SyncActions.MERGE},
         "lockdowns": {"action": SyncActions.MERGE},
@@ -318,7 +339,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             }
         },
         "wc_category_lookup": {"action": SyncActions.MERGE},        # was SKIP
-        "wc_customer_lookup": {"action": SyncActions.COPY},
+        "wc_customer_lookup": {"action": SyncActions.MERGE},        # was COPY
         "wc_download_log": {"action": SyncActions.MERGE},
         "wc_order_coupon_lookup": {"action": SyncActions.MERGE},
         "wc_order_product_lookup": {"action": SyncActions.MERGE},

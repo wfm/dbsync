@@ -10,8 +10,8 @@ from dbsync.settings import Settings
 @dataclass
 class RowData:
     insert_vals: Dict[str, str]
-    new_pk_val: int
-    old_pk_val: int
+    new_autoinc_val: int
+    old_autoinc_val: int
 
 
 @dataclass
@@ -97,12 +97,12 @@ class InsertDiffs:
 
     def find_replacement_key(self, old_key_val: int) -> int:
         if not self.is_sorted:
-            self.additions.sort(key=lambda x: x.old_pk_val)
+            self.additions.sort(key=lambda x: x.old_autoinc_val)
             self.is_sorted = True
 
-        idx = bisect_left(self.additions, old_key_val, key=lambda x: x.old_pk_val)
-        if idx != len(self.additions) and self.additions[idx].old_pk_val == old_key_val:
-            return self.additions[idx].new_pk_val
+        idx = bisect_left(self.additions, old_key_val, key=lambda x: x.old_autoinc_val)
+        if idx != len(self.additions) and self.additions[idx].old_autoinc_val == old_key_val:
+            return self.additions[idx].new_autoinc_val
         if old_key_val < self.dst_table.get_starting_autoinc_val():
             return old_key_val
         raise ValueError(f"Old key {old_key_val} not found \
