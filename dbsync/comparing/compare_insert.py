@@ -67,7 +67,7 @@ key cols = {src.key_column_names}")
         self.srcgen = CompareInsert.Generator(self.src)
         self.dstgen = CompareInsert.Generator(self.dst)
 
-        self.add: List[RowData] = []
+        self.add: List[Dict[str, str]] = []
         self.update: List[InsertRecord] = []
 
     def _create_debug_file(self) -> TextIOWrapper | None:
@@ -120,7 +120,7 @@ key cols = {src.key_column_names}")
                 if self.debug_mode:
                     self._debug_insert(src_item, dst_item)
 
-                self._append_insert_vals(src_item.insert_vals)
+                self.add.append(src_item.insert_vals)
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
@@ -139,7 +139,8 @@ key cols = {src.key_column_names}")
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
 
-        return InsertDiffs(self.dst_table, self.add, self.update)
+        with_updated_aivs = self._update_autoinc_vals()
+        return InsertDiffs(self.dst_table, with_updated_aivs, self.update)
 
     def _debug_insert(self, src_item, dst_item):
         if self.dstgen is None or not self.dstgen.is_open:
@@ -193,21 +194,24 @@ key cols = {src.key_column_names}")
             self.debug_print(old_print)
             self.debug_print(80 * '=')
 
-    def _append_insert_vals(self, insert_vals: Dict[str, str]) -> RowData:
-        """Updates the PK, if necessary, and appends the record to the add list."""
-        _, old_pk_val = self._get_old_pk_val(insert_vals)
-        if self.are_copying:
-            rd = RowData(insert_vals, old_pk_val, old_pk_val)
-        elif not self.dst_table.has_autoinc_column():
-            rd = RowData(insert_vals, -1, -1)
-        elif self._has_autoinc_val(old_pk_val):
-            rd = self._assign_new_pk(insert_vals)
-        else:
-            rd = RowData(insert_vals, old_pk_val, old_pk_val)
-            msg = f"  Reusing PK: {old_pk_val}"
-            self.debug_print(msg)
+    def _update_autoinc_vals(self) -> List[RowData]:
+        result: List[RowData] = []
+        for insert_vals in self.add:
+            _, old_pk_val = self._get_old_pk_val(insert_vals)
+            if self.are_copying:
+                rd = RowData(insert_vals, old_pk_val, old_pk_val)
+            elif not self.dst_table.has_autoinc_column():
+                rd = RowData(insert_vals, -1, -1)
+            elif self._has_autoinc_val(old_pk_val):
+                rd = self._assign_new_pk(insert_vals)
+            else:
+                assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this autoinc value"
+                rd = RowData(insert_vals, old_pk_val, old_pk_val)
+                msg = f"  Reusing PK: {old_pk_val}"
+                self.debug_print(msg)
+            result.append(rd)
 
-        self.add.append(rd)
+        return result
 
     def _get_old_pk_val(self, insert_vals: Dict[str, str]) -> Tuple[str, str]:
         """Returns the current PK in a row to be inserted"""
