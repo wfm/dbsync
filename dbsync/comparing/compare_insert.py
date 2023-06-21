@@ -21,9 +21,10 @@ class CompareInsert:
     class Generator:
         """Decorates an UnpackedInsert generator"""
         def __init__(self, ui: UnpackedInsert):
-            ui.sort()
-            self.gen = ui.values_gen()
-            self.is_open = True
+            self.is_open = ui is not None
+            if self.is_open:
+                ui.sort()
+                self.gen = ui.values_gen()
 
         def get_next_item(self) -> InsertRecord | None:
             """Gets the next item from the generator"""
@@ -50,8 +51,6 @@ class CompareInsert:
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
-        self._verbose_print(f"    PKs: {self.dst_table.get_primary_key()}")
-
         self.dst_autoinc = []
         if self.dst is not None:
             self.dst_autoinc = \
@@ -65,13 +64,8 @@ class CompareInsert:
             self.debug_print(f"Comparing insert for {self.dst_table.name}, \
 key cols = {src.key_column_names}")
 
-        if self.src is not None:
-            self.srcgen = CompareInsert.Generator(self.src)
-
-        if self.dst is None:
-            self.dstgen = None
-        else:
-            self.dstgen = CompareInsert.Generator(self.dst)
+        self.srcgen = CompareInsert.Generator(self.src)
+        self.dstgen = CompareInsert.Generator(self.dst)
 
         self.add: List[RowData] = []
         self.update: List[InsertRecord] = []
@@ -110,44 +104,32 @@ key cols = {src.key_column_names}")
     def _save_autoinc_val(self, to_save) -> None:
         """Add the PK to the list of dst PKs"""
         # The list is sorted, don't mess that up
+        assert to_save is not None, "Don't save None"
         self.dst_autoinc.append(to_save)
 
     def compare(self):
         if self.src is None:
             return InsertDiffs(self.dst_table, [], [])
         src_item = self.srcgen.get_next_item()
-        if self.dstgen is not None:
-            dst_item = self.dstgen.get_next_item()
+        dst_item = self.dstgen.get_next_item()
 
         while self.srcgen.is_open:
             if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
                 if self.debug_mode:
-                    if self.dstgen is None or not self.dstgen.is_open:
-                        dst_key = "None"
-                    else:
-                        dst_key = dst_item.key
-                    self.debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
+                    self._debug_insert(src_item, dst_item)
 
                 self._append_insert_vals(src_item.insert_vals)
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
                 if self.debug_mode:
-                    self.debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
-                    hwm = Settings.obj().get_high_water(self.src_table.name)
-                    dst_pk_val = int(dst_item.pk[0])
-                    if dst_pk_val < hwm:
-                        msg = f"Possible delete, dst pk: {dst_pk_val}, hwm: {hwm}"
-                        self.debug_print(msg)
+                    self._debug_skip_dst(src_item, dst_item)
 
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
-                # if self.debug_mode:
-                #     self._debug_print(f"= {src_item.key}  {dst_item.key} => SKIP")
-
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
             else:
@@ -158,6 +140,21 @@ key cols = {src.key_column_names}")
                 dst_item = self.dstgen.get_next_item()
 
         return InsertDiffs(self.dst_table, self.add, self.update)
+
+    def _debug_insert(self, src_item, dst_item):
+        if self.dstgen is None or not self.dstgen.is_open:
+            dst_key = "None"
+        else:
+            dst_key = dst_item.key
+        self.debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
+
+    def _debug_skip_dst(self, src_item, dst_item):
+        self.debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
+        hwm = Settings.obj().get_high_water(self.src_table.name)
+        dst_pk_val = int(dst_item.pk[0])
+        if dst_pk_val < hwm:
+            msg = f"Possible delete, dst pk: {dst_pk_val}, hwm: {hwm}"
+            self.debug_print(msg)
 
     def _compare_update(self, src_item, dst_item):
         updated = False
@@ -234,7 +231,8 @@ old: {old_pk_val}, new: {new_pk_val}"
         # Update URLs with the id in them
         # e.g., https://maryjoyart.com/?p=1712
         # TODO use "special rules"
-        pk_re = re.compile(r"(([?&]|&#03f;|&#038;)\w+=)" + str(old_pk_val) + r"\b", flags=re.IGNORECASE)
+        pattern = r"(([?&]|&#03f;|&#038;)\w+=)" + str(old_pk_val) + r"\b"
+        pk_re = re.compile(pattern, flags=re.IGNORECASE)
         repl = r"\g<1>" + str(new_pk_val)
         for k, v in insert_vals.items():
             new_v, num = pk_re.subn(repl, v)

@@ -322,9 +322,9 @@ def _get_post_table_modifiers(ss: SqlStatement, table: IM.Table) -> None:
         modifiers.append(t.value)
 
         if state == State.AUTO_INC and match_tokens(t, C.AUTO_INCREMENT_TOKEN):
-            state = state.EQUALS
+            state = State.EQUALS
         elif state == State.EQUALS and match_tokens(t, C.EQUALS_TOKEN):
-            state = state.VALUE
+            state = State.VALUE
         elif state == State.VALUE and t.ttype == T.Number.Integer:
             table.update_autoinc_val(int(t.value))
             state = State.DONE

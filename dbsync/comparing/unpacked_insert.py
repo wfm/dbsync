@@ -1,7 +1,7 @@
 """An easier-to-work-with representation of an insert statement"""
 
 import re
-from typing import List, Dict, Iterator
+from typing import Callable, List, Dict, Iterator
 from operator import itemgetter
 from dataclasses import dataclass, field
 
@@ -136,6 +136,7 @@ class UnpackedInsert:
 
         rules = Settings.obj().get_special_rules(self.name)
         if rules is None:
+            self._test_special_rules(values)
             return values
 
         def apply_rules(key: str, value: str) -> str:
@@ -146,7 +147,26 @@ class UnpackedInsert:
         result = [
             {k: apply_rules(k, v) for k, v in row.items()}
             for row in values]
+
+        self._test_special_rules(values, list(rules.keys()))
         return result
+
+    def _test_special_rules(self,
+                            values: List[Dict[str, str]],
+                            cols_with_rules: List[str] | None = None) -> None:
+        if not Settings.obj().debug_mode:
+            return
+
+        if cols_with_rules is None:
+            cols_with_rules = []
+
+        for row in values:
+            for col, val in row.items():
+                if col not in cols_with_rules:
+                    for regex in Settings.obj().get_test_patterns():
+                        m = regex.search(val)
+                        if m:
+                            print(f"Edit data in table {self.name}, column {col}: {m.group(0)}")
 
     def pack(self) -> IM.Insert:
         packed_vals = UnpackedInsert.pack_values(self.values)

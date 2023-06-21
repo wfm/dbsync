@@ -22,16 +22,16 @@ def to_camel(string: str) -> str:
 # methods for "special rules" for modding src data
 def alter_table_name(value: str) -> str:
     settings = Settings.obj()
-    pattern = f"(?<!{settings.dst_prefix}){settings.tbl_prefix}"
+    pattern = settings.get_test_table_name_pattern()
     repl = f"{settings.dst_prefix}{settings.tbl_prefix}"
     return re.sub(pattern, repl, value)
 
 
 def alter_site_url(value: str) -> str:
     settings = Settings.obj()
-    src_uri = settings.base_uri
-    dst_uri = settings.base_uri + settings.stage_uri_path
-    return value.replace(src_uri, dst_uri)
+    pattern = settings.get_test_site_url_pattern()
+    repl = settings.base_uri + settings.stage_uri_path
+    return re.sub(pattern, repl, value)
 
 
 class DmlOptions(Enum):
@@ -298,7 +298,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "lockdowns": {"action": SyncActions.MERGE},
         "login_fails": {"action": SyncActions.MERGE},
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
-        "options": {"action": SyncActions.MERGE},       # was SKIP
+        "options": {
+            "action": SyncActions.MERGE,       # was SKIP
+            "special_rules": {
+                "option_name": alter_table_name,
+                "option_value": alter_site_url
+            }
+        },
         "postmeta": {
             "action": SyncActions.MERGE,
             "synthetic_unique_key": ["post_id", "meta_key"]
@@ -307,7 +313,8 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             "action": SyncActions.MERGE,
             "use_time_based_comparison": True,
             "special_rules": {
-                "guid": alter_site_url
+                "guid": alter_site_url,
+                "post_content": alter_site_url
             }
         },
         "sib_model_forms": {"action": SyncActions.MERGE},           # was SKIP
@@ -346,7 +353,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "wc_order_stats": {"action": SyncActions.MERGE},
         "wc_order_tax_lookup": {"action": SyncActions.MERGE},
         "wc_product_attributes_lookup": {"action": SyncActions.MERGE},
-        "wc_product_download_directories": {"action": SyncActions.MERGE},
+        "wc_product_download_directories": {
+            "action": SyncActions.MERGE,
+            "special_rules": {
+                "url": alter_site_url
+            }
+        },
         "wc_product_meta_lookup": {"action": SyncActions.MERGE},
         "wc_rate_limits": {"action": SyncActions.MERGE},
         "wc_reserved_stock": {"action": SyncActions.MERGE},
@@ -372,14 +384,27 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "wpforms_tasks_meta": {"action": SyncActions.MERGE},
         "wpmailsmtp_debug_events": {"action": SyncActions.MERGE},
         "wpmailsmtp_tasks_meta": {"action": SyncActions.MERGE},
-        "yoast_indexable": {"action": SyncActions.MERGE},
+        "yoast_indexable": {
+            "action": SyncActions.MERGE,
+            "special_rules": {
+                "open_graph_image": alter_site_url,
+                "open_graph_image_meta": alter_site_url,
+                "permalink": alter_site_url,
+                "twitter_image": alter_site_url,
+            }
+        },
         "yoast_indexable_hierarchy": {
             "action": SyncActions.MERGE,        # was SKIP
             "synthetic_primary_key": ["indexable_id"]
         },
         "yoast_migrations": {"action": SyncActions.MERGE},
         "yoast_primary_term": {"action": SyncActions.MERGE},        # was SKIP
-        "yoast_seo_links": {"action": SyncActions.MERGE},           # was SKIP
+        "yoast_seo_links": {
+            "action": SyncActions.MERGE,            # was SKIP
+            "special_rules": {
+                "url": alter_site_url
+            }
+        }
     }
 
     default_sync_action: SyncActions = SyncActions.DEFAULT
@@ -432,6 +457,20 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             re.compile(f"^({'|'.join(self.integer_types)})", flags=re.IGNORECASE)
         self._numeric_types_regex = \
             re.compile(f"^({'|'.join(self.numeric_types)})", flags=re.IGNORECASE)
+
+    def get_test_table_name_pattern(self) -> str:
+        pattern = f"(?<!{self.dst_prefix}){self.tbl_prefix}"
+        return pattern
+
+    def get_test_site_url_pattern(self) -> str:
+        return r"\b" + self.base_uri + f"(?!{self.stage_uri_path})"
+
+    def get_test_patterns(self) -> List[re.Pattern]:
+        result = [
+            re.compile(self.get_test_table_name_pattern()),
+            re.compile(self.get_test_site_url_pattern())
+        ]
+        return result
 
     def is_integer_datatype(self, datatype):
         return self._integer_types_regex.search(datatype) is not None
@@ -512,6 +551,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         base_name = self.get_base_table_name(table_name)
         return [fk for fk in self.foreign_keys if fk.src_table == base_name]
 
+    def has_foreign_keys(self, table_name) -> bool:
+        base_name = self.get_base_table_name(table_name)
+        return any(fk for fk in self.foreign_keys if fk.src_table == base_name)
+
     def get_table_action(self, table_name: str) -> SyncActions:
         """Returns the sync action for a table."""
         base_name = self.get_base_table_name(table_name)
@@ -563,7 +606,6 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             raise DbSyncParseException(msg)
 
         return _global_config
-
 
 _global_config: Settings | None = None
 

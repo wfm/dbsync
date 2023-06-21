@@ -33,11 +33,12 @@ class Comparison:
         else:
             self.fd = None
 
-    def _write_sql(self, text: str) -> None:
+    def _write_sql(self, text: str, blank_line: bool = True) -> None:
+        prefix = "\n" if blank_line else ""
         if self.fd is None:
-            print(text)
+            print(prefix + text)
         else:
-            self.fd.write(text + "\n")
+            self.fd.write(prefix + text + "\n")
 
     def _print_remark(self, text: str) -> None:
         if Settings.obj().verbose_mode:
@@ -90,6 +91,8 @@ class Comparison:
 
         if action == SyncActions.COPY:
             self._print_remark(f"\nCOPY table {table.name}")
+            if (Settings.obj().has_foreign_keys(table.name)):
+                self._print_remark("  WARNING: table has foreign keys that won't be updated")
             self._copy_table(table, dst)
             return
 
@@ -132,26 +135,22 @@ class Comparison:
             ci.close()
             sql_text = diffs.generate_sql()
             if len(sql_text) > 0:
-                self._write_sql(f"\n\n-- Prod table {src.name}")
+                self._write_sql(f"\n-- Prod table {src.name}")
                 if dst is not None:
-                    self._write_sql(f"-- Staging table {dst.name}")
+                    self._write_sql(f"-- Staging table {dst.name}", blank_line=False)
                 else:
-                    self._write_sql("-- No staging table found")
+                    self._write_sql("-- No staging table found", blank_line=False)
 
                 if src.has_autoinc_column():
                     new_autoinc = max(src.get_autoinc_val(), dst.get_autoinc_val())
-                    self._write_sql("")
                     self._write_sql(dst.disable_autoinc(autoinc_val=new_autoinc))
 
                 if truncate:
-                    self._write_sql("")
                     self._write_sql(dst.truncate())
 
-                self._write_sql("")
                 self._write_sql(sql_text)
 
                 if src.has_autoinc_column():
-                    self._write_sql("")
                     self._write_sql(dst.enable_autoinc(autoinc_val=new_autoinc))
 
     # TODO what happens with multi-column keys?
@@ -176,7 +175,7 @@ class Comparison:
                     old_key_val = add.insert_vals[fk.src_column]
                     # TODO i thought we were replacing NULL with None
                     if old_key_val is not None and \
-                            old_key_val.casefold != "null" \
+                            old_key_val.casefold() != "null" \
                             and int(old_key_val) > 0:
                         new_key_val = fk_id.find_replacement_key(int(old_key_val))
                         if new_key_val != int(old_key_val):
