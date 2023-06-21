@@ -1,7 +1,7 @@
 """An easier-to-work-with representation of an insert statement"""
 
 import re
-from typing import Callable, List, Dict, Iterator
+from typing import List, Dict, Iterator
 from operator import itemgetter
 from dataclasses import dataclass, field
 
@@ -38,6 +38,7 @@ class UnpackedInsert:
             raise DbSyncCompareException("Table has no keys")
 
         self.key_column_names = self.comparison_key.get_column_names()
+
         # for timestamp-based comparison
         if table.use_time_based_comparison:
             self.create_time_column_name = table.get_create_time_column_name()
@@ -76,6 +77,10 @@ class UnpackedInsert:
        keys: {self.key_column_names}
    non-keys: {self.nonkey_column_names}
      values: {self.values}"""
+
+    def _verbose_print(self, text: str) -> None:
+        if Settings.obj().verbose_mode:
+            print(text)
 
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:

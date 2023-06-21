@@ -143,7 +143,7 @@ class Table(Intermediate, NameMixin):
         return self._keys
 
     def get_primary_key(self) -> Key | None:
-        """Returns the unique key, if any"""
+        """Returns the primary key, if any"""
         keys = [key for key in self.keys if key.is_primary]
         return self._return_key(keys, "primary")
     

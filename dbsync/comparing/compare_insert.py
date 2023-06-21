@@ -10,6 +10,7 @@ from dbsync import intermediate as IM
 from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync.comparing.unpacked_insert import InsertRecord, UnpackedInsert
 from dbsync.settings import Settings
+import dbsync.levenshtein as LEV
 
 
 class CompareInsert:
@@ -64,7 +65,8 @@ key cols = {src.key_column_names}")
                 [item.autoinc for item in self.dst.values_gen() if item.autoinc is not None]
             self.dst_autoinc.sort()
 
-        if self.dst_table.has_autoinc_column():
+        self.dst_table_has_autoinc_column = self.dst_table.has_autoinc_column()
+        if self.dst_table_has_autoinc_column:
             start = self.dst_table.get_starting_autoinc_val()
             curr = self.dst_table.get_autoinc_val()
             highest = self.dst_autoinc[-1] if len(self.dst_autoinc) > 0 else -1
@@ -114,6 +116,7 @@ key cols = {src.key_column_names}")
         # The list is sorted, don't mess that up
         assert to_save is not None, "Don't save None"
         self.dst_autoinc.append(to_save)
+        assert all(self.dst_autoinc[i] <= self.dst_autoinc[i+1] for i in range(len(self.dst_autoinc)-1)), "dst_autoinc is not sorted"
 
     def compare(self):
         if self.src is None:
@@ -142,6 +145,7 @@ key cols = {src.key_column_names}")
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
+                self.debug_print(f"= {src_item.key}  {dst_item.key} => SKIP both")       # TODO TEMPORARY
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
             else:
@@ -171,7 +175,7 @@ key cols = {src.key_column_names}")
 
     def _compare_update(self, src_item, dst_item):
         updated = False
-        do_update, maybe_update, msg = self._should_update(src_item, dst_item)
+        do_update, pk_based, msg = self._should_update(src_item, dst_item)
         cols = []  # TODO temp
         if do_update:
             # TODO use separate InsertRecord and UpdateRecord?
@@ -179,6 +183,9 @@ key cols = {src.key_column_names}")
             cols = list(update_vals.keys())   # TODO temp
             if len(update_vals) > 0:
                 updated = True
+                if pk_based:
+                    msg = self._msg_for_update(update_vals, old_vals, msg)
+
                 self.update.append(
                     InsertRecord(
                         src_item.key,
@@ -192,11 +199,8 @@ key cols = {src.key_column_names}")
                         msg))
 
         if self.debug_mode and updated:
-            self.debug_print(f"{'U' if updated else 'X'} {src_item.key}  {dst_item.key} => {cols}")
+            self.debug_print(f"'U' {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
             self.debug_print(msg)
-
-            if not updated:
-                update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
             update_print = {k: v[:50] for k, v in update_vals.items()}
             self.debug_print("NEW:")
             self.debug_print(update_print)
@@ -206,8 +210,18 @@ key cols = {src.key_column_names}")
             self.debug_print(old_print)
             self.debug_print(80 * '=')
 
+    def _msg_for_update(self,
+                        update_vals: Dict[str, str],
+                        old_vals: Dict[str, str],
+                        msg: str) -> str:
+        if len(msg) > 0:
+            msg += "\n"
+        old_print = {k: v[:30] for k, v in old_vals.items()}
+        msg += f"-- Was: {old_print}"
+        return msg
+
     def _update_autoinc_vals(self) -> List[RowData]:
-        if self.dst_table.has_autoinc_column():
+        if self.dst_table_has_autoinc_column:
             start = self.dst_table.get_starting_autoinc_val()
             curr = self.dst_table.get_autoinc_val()
             highest = self.dst_autoinc[-1] if len(self.dst_autoinc) > 0 else -1
@@ -215,58 +229,62 @@ key cols = {src.key_column_names}")
             self.debug_print(f"  src highest autoinc val {self.max_src_autoinc}")
 
         result: List[RowData] = []
-        if self.dst_table.has_autoinc_column() and \
+        if self.dst_table_has_autoinc_column and \
                 self.dst_table.get_autoinc_val() <= self.max_src_autoinc:
             self.dst_table.update_autoinc_val(self.max_src_autoinc + 1)
             self.debug_print(f"  New autoinc value is: {self.dst_table.get_autoinc_val()}")
 
         for insert_vals in self.add:
-            _, old_pk_val = self._get_old_pk_val(insert_vals)
+            ai_col_name, old_ai_val = self._get_old_autoinc_val(insert_vals)
             if self.are_copying:
-                rd = RowData(insert_vals, old_pk_val, old_pk_val)
-            elif not self.dst_table.has_autoinc_column():
+                rd = RowData(insert_vals, old_ai_val, old_ai_val)
+            elif not self.dst_table_has_autoinc_column:
+                # i think this elif is superfluous
                 rd = RowData(insert_vals, -1, -1)
-            elif not self._dst_has_autoinc_val(old_pk_val):
-                rd = RowData(insert_vals, old_pk_val, old_pk_val)
-                msg = f"  Reusing PK: {old_pk_val}"
+            elif not self._dst_has_autoinc_val(old_ai_val):
+                rd = RowData(insert_vals, old_ai_val, old_ai_val)
+                msg = f"  Reusing PK: {old_ai_val}"
                 self.debug_print(msg)
             else:
-                rd = self._assign_new_pk(insert_vals)
+                rd = self._assign_new_autoinc_val(insert_vals, ai_col_name, old_ai_val)
 
             result.append(rd)
 
         return result
 
-    def _get_old_pk_val(self, insert_vals: Dict[str, str]) -> Tuple[str, str]:
-        """Returns the current PK in a row to be inserted"""
-        pk_name = self.dst_table.get_primary_key().get_column_names()
-        # TODO: some tables have compound PKs
-        assert len(pk_name) == 1, "Expected 1 PK column name"
-        pk_name = pk_name[0]
-        old_pk_val = insert_vals[pk_name]
-        return pk_name, int(old_pk_val)
+    def _get_old_autoinc_val(self, insert_vals: Dict[str, str]) -> Tuple[str, str]:
+        """Returns the current auto-increment value in a row to be inserted"""
+        if self.dst_table_has_autoinc_column:
+            ai_col_name = self.dst_table.get_autoinc_column_name()
+            old_ai_val = insert_vals[ai_col_name]
+            return ai_col_name, int(old_ai_val)
+        return "N/A", -1
 
-    def _assign_new_pk(self, insert_vals: Dict[str, str]) -> RowData:
+    def _assign_new_autoinc_val(self,
+                                insert_vals: Dict[str, str],
+                                ai_col_name: str,
+                                old_ai_val: int) -> RowData:
         """Assigns a new PK value to an inserted record"""
-        new_pk_val = self.dst_table.next_autoinc_val()
-        self._save_dst_autoinc_val(new_pk_val)
-        pk_name, old_pk_val = self._get_old_pk_val(insert_vals)
-        insert_vals[pk_name] = str(new_pk_val)
-        msg = f"  Assigned new PK to column {pk_name}, \
-old: {old_pk_val}, new: {new_pk_val}"
+        assert self.dst_table_has_autoinc_column, "Can't assign autoinc value to this table"
+
+        new_ai_val = self.dst_table.next_autoinc_val()
+        self._save_dst_autoinc_val(new_ai_val)
+        insert_vals[ai_col_name] = str(new_ai_val)
+        msg = f"  Assigned new PK to column {ai_col_name}, \
+old: {old_ai_val}, new: {new_ai_val}"
         self.debug_print(msg)
 
         # Update URLs with the id in them
         # e.g., https://maryjoyart.com/?p=1712
         # TODO use "special rules"
-        pattern = r"(([?&]|&#03f;|&#038;)\w+=)" + str(old_pk_val) + r"\b"
+        pattern = r"(([?&]|&#03f;|&#038;)\w+=)" + str(old_ai_val) + r"\b"
         pk_re = re.compile(pattern, flags=re.IGNORECASE)
-        repl = r"\g<1>" + str(new_pk_val)
+        repl = r"\g<1>" + str(new_ai_val)
         for k, v in insert_vals.items():
             new_v, num = pk_re.subn(repl, v)
             if num > 0:
                 insert_vals[k] = new_v
-        return RowData(insert_vals, int(new_pk_val), int(old_pk_val))
+        return RowData(insert_vals, int(new_ai_val), int(old_ai_val))
 
     _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
@@ -287,39 +305,31 @@ old: {old_pk_val}, new: {new_pk_val}"
         We can only guess...
         """
         do_update = False
-        maybe_update = False
         msg = ""
         if len(src_item.pk) > 1:
-            print(f"*** multi-column PK: {src_item.pk}")
+            self._verbose_print(f"*** multi-column PK: {src_item.pk}")
 
-        if not self.src_table.has_autoinc_column():
+        if not self.dst_table_has_autoinc_column:
             msg = "No auto-increment on this table"
-            return do_update, maybe_update, msg
+            return do_update, True, msg
 
-        # Here is where it might be good to know the autoinc_val
-        # when the staging tables were created.
         hwm = Settings.obj().get_high_water(self.src_table.name)
         src_end = self.src_table.get_starting_autoinc_val()
         src_pk_val = int(src_item.pk[0])
-        dst_end = self.dst_table.get_starting_autoinc_val()
         dst_pk_val = int(dst_item.pk[0])
 
         if src_pk_val == dst_pk_val:
             msg = "PKs are equal, MAYBE update"
+            if src_pk_val > hwm:
+                msg += ", MAYBE insert src"
             do_update = True
-            maybe_update = True
         elif dst_pk_val > src_end:
             msg = "dst record is more recent, don't update"
         else:
             do_update = True
-            msg = "src record is possibly more recent, update"
+            msg = "src record is POSSIBLY more recent, update"
 
-        if self.debug_mode:
-            extra = f" - hwm: {hwm}, src: {[src_end, src_pk_val]} > \
-dst: {[dst_end, dst_pk_val]} => {do_update}"
-            self.debug_print(f"  comparing PKs {extra}")
-            msg += extra
-        return do_update, maybe_update, msg
+        return do_update, True, msg
 
     def _time_should_update(self,
                             src_item: InsertRecord,
@@ -329,7 +339,7 @@ dst: {[dst_end, dst_pk_val]} => {do_update}"
         This should be exact.
         """
         do_update = False
-        msg = ""
+        msg = "Timestamp comparison"
         src_times = self._get_column_values(src_item.insert_vals, self.dst_table.timestamp_columns)
         dst_times = self._get_column_values(dst_item.insert_vals, self.dst_table.timestamp_columns)
         try:
@@ -337,7 +347,6 @@ dst: {[dst_end, dst_pk_val]} => {do_update}"
             dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
             do_update = src >= dst  # TODO is it ok to compare strings here?
-            msg = ("" if do_update else "DO NOT ") + "Update dst"
         except StopIteration:
             msg = "*** Time comparison raised StopIteration ***"
             print(msg)
