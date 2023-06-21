@@ -51,18 +51,26 @@ class CompareInsert:
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
-        self.dst_autoinc = []
-        if self.dst is not None:
-            self.dst_autoinc = \
-                [item.autoinc for item in self.dst.values_gen() if item.autoinc is not None]
-            self.dst_autoinc.sort()
-
         self.debug_mode = Settings.obj().debug_mode
         self.debug_file = self._create_debug_file()
 
         if self.debug_mode:
             self.debug_print(f"Comparing insert for {self.dst_table.name}, \
 key cols = {src.key_column_names}")
+
+        self.dst_autoinc = []
+        if self.dst is not None:
+            self.dst_autoinc = \
+                [item.autoinc for item in self.dst.values_gen() if item.autoinc is not None]
+            self.dst_autoinc.sort()
+
+        if self.dst_table.has_autoinc_column():
+            start = self.dst_table.get_starting_autoinc_val()
+            curr = self.dst_table.get_autoinc_val()
+            highest = self.dst_autoinc[-1] if len(self.dst_autoinc) > 0 else -1
+            self.debug_print(f"  autoinc before - starting: {start}, current: {curr}, highest: {highest}")
+
+        self.max_src_autoinc = -1
 
         self.srcgen = CompareInsert.Generator(self.src)
         self.dstgen = CompareInsert.Generator(self.dst)
@@ -96,12 +104,12 @@ key cols = {src.key_column_names}")
             self.debug_file.close()
             self.debug_file = None
 
-    def _has_autoinc_val(self, to_search: int) -> bool:
+    def _dst_has_autoinc_val(self, to_search: int) -> bool:
         """Searches dst PKs to see if a PK is in use"""
         idx = bisect_left(self.dst_autoinc, to_search)
         return idx != len(self.dst_autoinc) and self.dst_autoinc[idx] == to_search
 
-    def _save_autoinc_val(self, to_save) -> None:
+    def _save_dst_autoinc_val(self, to_save) -> None:
         """Add the PK to the list of dst PKs"""
         # The list is sorted, don't mess that up
         assert to_save is not None, "Don't save None"
@@ -114,6 +122,10 @@ key cols = {src.key_column_names}")
         dst_item = self.dstgen.get_next_item()
 
         while self.srcgen.is_open:
+            if src_item.autoinc is not None and \
+                    src_item.autoinc > self.max_src_autoinc:
+                self.max_src_autoinc = src_item.autoinc
+
             if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
@@ -195,20 +207,32 @@ key cols = {src.key_column_names}")
             self.debug_print(80 * '=')
 
     def _update_autoinc_vals(self) -> List[RowData]:
+        if self.dst_table.has_autoinc_column():
+            start = self.dst_table.get_starting_autoinc_val()
+            curr = self.dst_table.get_autoinc_val()
+            highest = self.dst_autoinc[-1] if len(self.dst_autoinc) > 0 else -1
+            self.debug_print(f"  autoinc after - starting: {start}, current: {curr}, highest: {highest}")
+            self.debug_print(f"  src highest autoinc val {self.max_src_autoinc}")
+
         result: List[RowData] = []
+        if self.dst_table.has_autoinc_column() and \
+                self.dst_table.get_autoinc_val() <= self.max_src_autoinc:
+            self.dst_table.update_autoinc_val(self.max_src_autoinc + 1)
+            self.debug_print(f"  New autoinc value is: {self.dst_table.get_autoinc_val()}")
+
         for insert_vals in self.add:
             _, old_pk_val = self._get_old_pk_val(insert_vals)
             if self.are_copying:
                 rd = RowData(insert_vals, old_pk_val, old_pk_val)
             elif not self.dst_table.has_autoinc_column():
                 rd = RowData(insert_vals, -1, -1)
-            elif self._has_autoinc_val(old_pk_val):
-                rd = self._assign_new_pk(insert_vals)
-            else:
-                assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this autoinc value"
+            elif not self._dst_has_autoinc_val(old_pk_val):
                 rd = RowData(insert_vals, old_pk_val, old_pk_val)
                 msg = f"  Reusing PK: {old_pk_val}"
                 self.debug_print(msg)
+            else:
+                rd = self._assign_new_pk(insert_vals)
+
             result.append(rd)
 
         return result
@@ -225,7 +249,7 @@ key cols = {src.key_column_names}")
     def _assign_new_pk(self, insert_vals: Dict[str, str]) -> RowData:
         """Assigns a new PK value to an inserted record"""
         new_pk_val = self.dst_table.next_autoinc_val()
-        self._save_autoinc_val(new_pk_val)
+        self._save_dst_autoinc_val(new_pk_val)
         pk_name, old_pk_val = self._get_old_pk_val(insert_vals)
         insert_vals[pk_name] = str(new_pk_val)
         msg = f"  Assigned new PK to column {pk_name}, \
