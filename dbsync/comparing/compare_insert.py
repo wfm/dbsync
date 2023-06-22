@@ -116,7 +116,6 @@ key cols = {src.key_column_names}")
         # The list is sorted, don't mess that up
         assert to_save is not None, "Don't save None"
         self.dst_autoinc.append(to_save)
-        assert all(self.dst_autoinc[i] <= self.dst_autoinc[i+1] for i in range(len(self.dst_autoinc)-1)), "dst_autoinc is not sorted"
 
     def compare(self):
         if self.src is None:

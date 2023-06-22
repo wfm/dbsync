@@ -92,11 +92,14 @@ class InsertDiffs:
             sql.append(f"-- {self.table_msg}")
             self._verbose_print("  " + self.table_msg)
 
-        upd_len = len(self.updates)
-        if (upd_len > 0):
-            r = self._pluralize(upd_len, "record")
-            sql.append(f"-- Updating {upd_len} {r}:")
-            self._verbose_print(f"    Updating {upd_len} {r}")
+        total_len = len(self.updates)
+        p_len = len([x for x in self.updates if x.is_pessimistic])
+        upd_len = total_len - p_len
+        if (total_len > 0):
+            ru = self._pluralize(upd_len, "record")
+            rp = self._pluralize(p_len, "record")
+            sql.append(f"-- Updating {upd_len} {ru}, pessimistically omitting {p_len} {rp}:")
+            self._verbose_print(f"    Updating {upd_len} {ru}, pessimistically omitting {p_len} {rp}")
             for upd in self.updates:
                 sql += self._generate_update(upd)
 

@@ -98,8 +98,10 @@ class Comparison:
 
         if action == SyncActions.MERGE:
             self._print_remark(f"\nMERGE table {table.name}")
-            update_mode = Settings.obj().get_update_mode(self.dst_table.name)
+            update_mode = Settings.obj().get_update_mode(table.name)
             self._print_remark(f"  Update mode is {UpdateModes(update_mode).name}")
+            text = "has" if Settings.obj().table_has_timestamp(table.name) else "does not have"
+            self._print_remark(f"  Table {text} a timestamp column")
             self._merge_table(table, dst)
             return
 
