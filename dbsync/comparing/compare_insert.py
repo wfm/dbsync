@@ -7,6 +7,7 @@ from io import TextIOWrapper
 from typing import Any, Dict, List, Tuple
 
 from dbsync import intermediate as IM
+from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync.comparing.unpacked_insert import InsertRecord, UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
@@ -44,11 +45,13 @@ class CompareInsert:
                  src_table: IM.Table,
                  dst: UnpackedInsert | None,
                  dst_table: IM.Table,
+                 repo: ComparisonRepo,
                  are_copying: bool = False) -> InsertDiffs:
         self.src = src
         self.src_table = src_table
         self.dst = dst
         self.dst_table = dst_table
+        self.repo = repo
         # if true, reuse PKs on inserts
         self.are_copying = are_copying
 
@@ -73,6 +76,10 @@ key cols = {src.key_column_names}")
             self.debug_print(f"  autoinc before - starting: {start}, current: {curr}, highest: {highest}")
 
         self.max_src_autoinc = -1
+
+        self.check_fk_timestamps = not self.src_table.has_timestamp() and self._has_fk_timestamps()
+        if self.check_fk_timestamps:
+            self._verbose_print("  Table has FK timestamps")
 
         self.srcgen = CompareInsert.Generator(self.src)
         self.dstgen = CompareInsert.Generator(self.dst)
@@ -173,16 +180,18 @@ key cols = {src.key_column_names}")
             self.debug_print(msg)
 
     def _compare_update(self, src_item: InsertRecord, dst_item: InsertRecord) -> None:
-        do_update, ir = self._build_update_record(src_item, dst_item)
+        do_update, ir, old_vals = self._build_update_record(src_item, dst_item)
         if do_update:
             self.update.append(ir)
 
             if self.debug_mode:
                 cols = list(ir.update_vals.keys())
-                self.debug_print(f"'U' {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
+                self.debug_print(f"U {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
                 self.debug_print(f"  {ir.msg}")
                 update_print = {k: v[:50] for k, v in ir.update_vals.items()}
                 self.debug_print(f"  NEW: {update_print}")
+                old_print = {k: v[:50] for k, v in old_vals.items()}
+                self.debug_print(f"  OLD: {old_print}")
 
     def _msg_for_update(self,
                         update_vals: Dict[str, str],
@@ -262,7 +271,7 @@ old: {old_ai_val}, new: {new_ai_val}"
 
     def _build_update_record(self,
                              src_item: InsertRecord,
-                             dst_item: InsertRecord) -> Tuple[bool, InsertRecord | None]:
+                             dst_item: InsertRecord) -> Tuple[bool, InsertRecord | None, Dict[str, str] | None]:
         row_action = Settings.obj().get_row_level_action(self.src_table.name, src_item.key)
         match row_action:
             case RowUpdateActions.INSERT_SRC:
@@ -278,11 +287,11 @@ old: {old_ai_val}, new: {new_ai_val}"
             # TODO use separate InsertRecord and UpdateRecord?
             update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
             if len(update_vals) > 0:
-                if pk_based:
-                    msg = self._msg_for_update(update_vals, old_vals, msg)
+                # if pk_based:
+                #     msg = self._msg_for_update(update_vals, old_vals, msg)
 
-                if src_item.is_unique:
-                    msg += f"\n-- Unique key: {src_item.key_vals}"
+                # if src_item.is_unique:
+                #     msg += f"\n-- Unique key: {src_item.key_vals}"
 
                 update_mode = Settings.obj().get_update_mode(self.dst_table.name)
                 is_pessimistic = update_mode == UpdateModes.PESSIMISTIC and confidence <= 0
@@ -298,17 +307,51 @@ old: {old_ai_val}, new: {new_ai_val}"
                     src_item.is_unique,
                     msg,
                     is_pessimistic)
-                return True, ir
-        return False, None
+                return True, ir, old_vals
+        return False, None, None
 
     def _should_update(self,
                        src_item: InsertRecord,
                        dst_item: InsertRecord) -> Tuple[bool, bool, str, int]:
         """Tries to figure out whether a record should be updated"""
-        if self.dst_table.timestamp_columns is None or \
-                len(self.dst_table.timestamp_columns) == 0:
-            return self._pk_should_update(src_item, dst_item)
-        return self._time_should_update(src_item, dst_item)
+        if self.dst_table.has_timestamp():
+            return self._time_should_update(src_item, dst_item)
+        
+        if self.check_fk_timestamps:
+            src_fk_timestamps = self._get_fk_timestamps(src_item, self.src_table)
+            dst_fk_timestamps = self._get_fk_timestamps(dst_item, self.dst_table)
+            return self._check_timestamps(src_fk_timestamps, dst_fk_timestamps)
+
+        return self._pk_should_update(src_item, dst_item)
+
+    def _has_fk_timestamps(self) -> bool:
+        fks = Settings.obj().get_foreign_keys(self.src_table.name)
+        for fk in fks:
+            fk_name = Settings.obj().patch_table_name(fk.dst_table, self.src_table.name)
+            fk_table = self.repo.get_table(fk_name)
+            if fk_table.has_timestamp():
+                return True
+        return False
+    
+    def _get_fk_timestamps(self, item: InsertRecord, table: IM.Table) -> List[str] | None:
+        fks = Settings.obj().get_foreign_keys(table.name)
+        for fk in fks:
+            fk_name = Settings.obj().patch_table_name(fk.dst_table, table.name)
+            fk_table = self.repo.get_table(fk_name)
+            if fk_table.has_timestamp():
+                inserts = self.repo.get_inserts(fk_name)
+                # TODO brute force search will be slow
+                item_fk = item.insert_vals[fk.src_column]
+                for insert in inserts:
+                    for row in insert.values:
+                        other_key = insert.get_pk(row)[0]
+                        if item_fk == other_key:
+                            times = CompareInsert._get_column_values(row, fk_table.timestamp_columns)
+                            #self.debug_print(f"  Found FK timestamps in {fk_name}: {times}")
+                            #self.debug_print(f"    timestamp cols: {fk_table.timestamp_columns}")
+                            #self.debug_print(f"    insert vals: {row}")
+                            return times
+        return None
 
     def _pk_should_update(self,
                           src_item: InsertRecord,
@@ -338,11 +381,11 @@ old: {old_ai_val}, new: {new_ai_val}"
             confidence = -1
             do_update = True
         elif dst_pk_val > src_end:
-            msg = "dst record is more recent, don't update"
+            msg = "PK of dst record is more recent, don't update"
             confidence = 1
         else:
             do_update = True
-            msg = "src record is POSSIBLY more recent, update"
+            msg = "PK of src record is POSSIBLY more recent, update"
 
         return do_update, True, msg, confidence
 
@@ -355,15 +398,26 @@ old: {old_ai_val}, new: {new_ai_val}"
         Uses timestamp data to decide if a record should be updated.
         This should be exact.
         """
-        do_update = False
-        msg = "Timestamp comparison"
         src_times = self._get_column_values(src_item.insert_vals, self.dst_table.timestamp_columns)
         dst_times = self._get_column_values(dst_item.insert_vals, self.dst_table.timestamp_columns)
+        return self._check_timestamps(src_times, dst_times)
+
+    def _check_timestamps(self,
+                          src_times: List[str],
+                          dst_times: List[str]) -> Tuple[bool, bool, str, int]:
+        """
+        Uses timestamp data to decide if a record should be updated.
+        This should be exact.
+        """
+        do_update = False
+        msg = "Timestamp comparison"
         try:
             src = next(filter(CompareInsert._time_regex.match, src_times))
             dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
             do_update = src >= dst  # TODO is it ok to compare strings here?
+            # TODO temp
+            #self.debug_print(f"    {src} >= {dst} => {do_update}")
         except StopIteration:
             msg = "*** Time comparison raised StopIteration ***"
             print(msg)

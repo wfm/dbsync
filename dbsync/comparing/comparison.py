@@ -132,7 +132,7 @@ class Comparison:
                         dst: IM.Table,
                         pairs: List[Tuple[IM.Insert, IM.Insert]]) -> None:
         for p in pairs:
-            ci = CompareInsert(p[0], src, p[1], dst, truncate)
+            ci = CompareInsert(p[0], src, p[1], dst, self.repo, truncate)
             diffs = ci.compare()
             self._add_to_insert_diffs(dst, diffs)
             self._patch_foreign_keys(diffs, dst, ci)

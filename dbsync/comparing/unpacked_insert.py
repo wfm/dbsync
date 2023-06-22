@@ -215,6 +215,9 @@ class UnpackedInsert:
         autoinc = re.sub(r"^([\"'])(\d+)\1$", r"\2", autoinc)
         return int(autoinc)
 
+    def get_pk(self, v: Dict[str, str]) -> List[str]:
+        return self.apply_getter(v, self._pk_getter)
+
     # TODO maybe use __iter__ ????
     def values_gen(self) -> Iterator[InsertRecord]:
         """Generator yielding keys and values from the insert statement"""
@@ -222,7 +225,7 @@ class UnpackedInsert:
             key = self.get_key(v)
             kv = self._get_key_values_dict(key)
             upd = self._get_nonkey_values_dict(v)
-            pk = self.apply_getter(v, self._pk_getter)
+            pk = self.get_pk(v)
             pk_vals = self._get_pk_values_dict(pk)
             autoinc = self._get_autoinc_value(v)
             yield InsertRecord(key, v, kv, upd, pk, pk_vals, autoinc, self.is_unique)

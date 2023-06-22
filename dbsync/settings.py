@@ -312,7 +312,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "login_fails": {"action": SyncActions.MERGE},
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
         "options": {
-            "action": SyncActions.MERGE,       # was SKIP
+            "action": SyncActions.MERGE,                # was SKIP
             "update_mode": UpdateModes.PESSIMISTIC,
             "special_rules": {
                 "option_name": alter_table_name,
@@ -335,7 +335,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "sib_model_users": {"action": SyncActions.MERGE},
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
-        "termmeta": {"action": SyncActions.MERGE},
+        "termmeta": {
+            "action": SyncActions.MERGE,
+            "update_mode": UpdateModes.PESSIMISTIC,
+        },
         "terms": {
             "action": SyncActions.MERGE,                            # was SKIP
             "row_level_actions": [
@@ -508,6 +511,11 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             return m.group(2)
         msg = f"Doesn't follow table name conventions: {table_name}"
         raise DbSyncParseException(msg)
+
+    def patch_table_name(self, from_base: str, from_name: str):
+        pattern = f"^(({self.src_prefix}|{self.dst_prefix}){self.tbl_prefix})"
+        m = re.search(pattern, from_name, flags=re.IGNORECASE)
+        return m.group(1) + from_base
 
     def get_src_table_name(self, table_name: str) -> str:
         base_name = self.get_base_table_name(table_name)

@@ -1,10 +1,7 @@
 # TODO
 ## Urgent
 * Integration tests - in progress
-* Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
-- Weird, ID is the PK
-* I've been conflating PK and auto-inc column. They're separate concepts.
-* Int columns are stored as strings and converted to int when needed. It's confusing.
+* It seems like WP Migrate exports some data that the phpMyAdmin backup misses. This causes our script to be wrong. 
 
 ## Medium-term
 * use ON DUPLICATE KEY UPDATE?
@@ -19,6 +16,7 @@
 * Linter errors in Github
 * After an ALTER TABLE statement, it may be necessary to run ANALYZE TABLE to update index cardinality information. See Section 13.7.7.22, “SHOW INDEX Statement”.
 * Use case-insensitive comparisons
+* Why are so many UnpackedInsert objects created for each table?
 
 ## Future
 * Implement stage -> prod
@@ -29,7 +27,11 @@
 * Generalize the state machine code
 
 # DONE
-* Post 1738 was not copied/copied correctly - I think it got a new 
+* Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
+- Weird, ID is the PK
+* I've been conflating PK and auto-inc column. They're separate concepts.
+* Int columns are stored as strings and converted to int when needed. It's confusing.
+* Post 1738 was not copied/copied correctly
 * Safe mode updates
 * Do we want to allow updates to PK of tables compared by unique key? I think not...
 - For _posts, should we reuse IDs and just update the post date?
@@ -62,6 +64,7 @@
 * Use LOCK TABLES `tbl_test0` WRITE; and UNLOCK TABLES?
 * Get it to work with dump from MySQL workbench
 
+===========
 2023-06-14:
 Your theme (Astra Child) contains outdated copies of some WooCommerce template files. These files may need updating to ensure they are compatible with the current version of WooCommerce. Suggestions to fix this:
 
@@ -113,3 +116,44 @@ ALTER TABLE `NhU_yoast_indexable_hierarchy`
 <strong>Your store requires a security update for the WooCommerce Stripe plugin</strong>. Please update the WooCommerce Stripe plugin immediately to address a potential vulnerability.
 
 Error Code: 1062. Duplicate entry '9420' for key 'staging_nhu_postmeta.PRIMARY'
+
+6/21/23
+assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this autoinc value"
+* We could wait until we've processed all the records to remap the autoinc values
+* Every src AIV that is >= dst starting AIV could be reused.
+* Then we'd just have to assign new values to the records being inserted that have:
+    src AIV < dst starting AIV
+
+
+* Add WC and migrate plugins on both sites
+
+Procedure:
+0. Put sites in maintenance mode (is there a message?)
+1. Do zip and mysqldump backups and download
+2. Do WP Migrate backups of prod and stage
+3. Run the dbsync program
+4. Hand-edit the term_taxonomy updates to keep just the tribe stuff
+5. Check with Local?
+6. Upload the script
+7. Run the script
+8. Check the stage site
+9. Push to prod
+10. Check the prod site
+11. Turn off maintenance mode
+
+Done:
+* Can we get a timestamp via a FK?
+* Check "maybe insert":
+    options - doesn't matter with unique key
+* Updates that should really be inserts:
+    -- PKs are equal, MAYBE update, MAYBE insert src, distance: 24
+    -- Was: {'name': "'Playful Art'", 'slug': "'playful-art'"}
+    UPDATE `staging_NhU_terms`
+    SET `name`='Market', `slug`='market'
+    WHERE `term_id`=49;
+* Which tables should be pessimistic? These tables use FK comparisons:
+    options - is pessimistic
+    term_taxonomy - hand-edit, keep tribe stuff, remove rest
+    termmeta - no idea, will make pessimistic
+    wc_product_download_directories
+
