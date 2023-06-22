@@ -9,8 +9,8 @@ from typing import Any, Dict, List, Tuple
 from dbsync import intermediate as IM
 from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync.comparing.unpacked_insert import InsertRecord, UnpackedInsert
-from dbsync.settings import Settings
-import dbsync.levenshtein as LEV
+from dbsync.exceptions import DbSyncCompareException
+from dbsync.settings import RowUpdateActions, Settings, UpdateModes
 
 
 class CompareInsert:
@@ -145,7 +145,7 @@ key cols = {src.key_column_names}")
                 dst_item = self.dstgen.get_next_item()
             elif src_item.insert_vals == dst_item.insert_vals:
                 # records are the same
-                self.debug_print(f"= {src_item.key}  {dst_item.key} => SKIP both")       # TODO TEMPORARY
+                # self.debug_print(f"= {src_item.key}  {dst_item.key} => SKIP both")       # TODO TEMPORARY
                 src_item = self.srcgen.get_next_item()
                 dst_item = self.dstgen.get_next_item()
             else:
@@ -173,42 +173,17 @@ key cols = {src.key_column_names}")
             msg = f"Possible delete, dst pk: {dst_pk_val}, hwm: {hwm}"
             self.debug_print(msg)
 
-    def _compare_update(self, src_item, dst_item):
-        updated = False
-        do_update, pk_based, msg = self._should_update(src_item, dst_item)
-        cols = []  # TODO temp
+    def _compare_update(self, src_item: InsertRecord, dst_item: InsertRecord) -> None:
+        do_update, ir = self._build_update_record(src_item, dst_item)
         if do_update:
-            # TODO use separate InsertRecord and UpdateRecord?
-            update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
-            cols = list(update_vals.keys())   # TODO temp
-            if len(update_vals) > 0:
-                updated = True
-                if pk_based:
-                    msg = self._msg_for_update(update_vals, old_vals, msg)
+            self.update.append(ir)
 
-                self.update.append(
-                    InsertRecord(
-                        src_item.key,
-                        None,
-                        src_item.key_vals,
-                        update_vals,
-                        src_item.pk,
-                        src_item.pk_vals,
-                        src_item.autoinc,
-                        src_item.is_unique,
-                        msg))
-
-        if self.debug_mode and updated:
-            self.debug_print(f"'U' {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
-            self.debug_print(msg)
-            update_print = {k: v[:50] for k, v in update_vals.items()}
-            self.debug_print("NEW:")
-            self.debug_print(update_print)
-            self.debug_print(80 * '-')
-            old_print = {k: v[:50] for k, v in old_vals.items()}
-            self.debug_print("OLD:")
-            self.debug_print(old_print)
-            self.debug_print(80 * '=')
+            if self.debug_mode:
+                cols = list(ir.update_vals.keys())
+                self.debug_print(f"'U' {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
+                self.debug_print(f"  {ir.msg}")
+                update_print = {k: v[:50] for k, v in ir.update_vals.items()}
+                self.debug_print(f"  NEW: {update_print}")
 
     def _msg_for_update(self,
                         update_vals: Dict[str, str],
@@ -286,11 +261,50 @@ old: {old_ai_val}, new: {new_ai_val}"
                 insert_vals[k] = new_v
         return RowData(insert_vals, int(new_ai_val), int(old_ai_val))
 
-    _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
+    def _build_update_record(self,
+                             src_item: InsertRecord,
+                             dst_item: InsertRecord) -> Tuple[bool, InsertRecord | None]:
+        row_action = Settings.obj().get_row_level_action(self.src_table.name, src_item.key)
+        match row_action:
+            case RowUpdateActions.INSERT_SRC:
+                self.debug_print(f"  Inserting {src_item.key} based on row-level action")
+                self.add.append(src_item.insert_vals)
+                do_update = False
+            case RowUpdateActions.DEFAULT:
+                do_update, pk_based, msg, confidence = self._should_update(src_item, dst_item)
+            case _:
+                raise DbSyncCompareException(f"Row action {RowUpdateActions(row_action).name} is not implemented")
+
+        if do_update:
+            # TODO use separate InsertRecord and UpdateRecord?
+            update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
+            if len(update_vals) > 0:
+                if pk_based:
+                    msg = self._msg_for_update(update_vals, old_vals, msg)
+
+                if src_item.is_unique:
+                    msg += f"\n-- Unique key: {src_item.key_vals}"
+
+                update_mode = Settings.obj().get_update_mode(self.dst_table.name)
+                is_pessimistic = update_mode == UpdateModes.PESSIMISTIC and confidence <= 0
+
+                ir = InsertRecord(
+                    src_item.key,
+                    None,
+                    src_item.key_vals,
+                    update_vals,
+                    src_item.pk,
+                    src_item.pk_vals,
+                    src_item.autoinc,
+                    src_item.is_unique,
+                    msg,
+                    is_pessimistic)
+                return True, ir
+        return False, None
 
     def _should_update(self,
                        src_item: InsertRecord,
-                       dst_item: InsertRecord) -> Tuple[bool, bool, str]:
+                       dst_item: InsertRecord) -> Tuple[bool, bool, str, int]:
         """Tries to figure out whether a record should be updated"""
         if self.dst_table.timestamp_columns is None or \
                 len(self.dst_table.timestamp_columns) == 0:
@@ -299,19 +313,18 @@ old: {old_ai_val}, new: {new_ai_val}"
 
     def _pk_should_update(self,
                           src_item: InsertRecord,
-                          dst_item: InsertRecord) -> Tuple[bool, bool, str]:
+                          dst_item: InsertRecord) -> Tuple[bool, bool, str, int]:
         """
         Uses PKs to decide if a record should be updated.
         We can only guess...
         """
         do_update = False
         msg = ""
-        if len(src_item.pk) > 1:
-            self._verbose_print(f"*** multi-column PK: {src_item.pk}")
+        confidence = 0
 
         if not self.dst_table_has_autoinc_column:
             msg = "No auto-increment on this table"
-            return do_update, True, msg
+            return do_update, True, msg, confidence
 
         hwm = Settings.obj().get_high_water(self.src_table.name)
         src_end = self.src_table.get_starting_autoinc_val()
@@ -322,18 +335,23 @@ old: {old_ai_val}, new: {new_ai_val}"
             msg = "PKs are equal, MAYBE update"
             if src_pk_val > hwm:
                 msg += ", MAYBE insert src"
+            # TODO possibly generate insert
+            confidence = -1
             do_update = True
         elif dst_pk_val > src_end:
             msg = "dst record is more recent, don't update"
+            confidence = 1
         else:
             do_update = True
             msg = "src record is POSSIBLY more recent, update"
 
-        return do_update, True, msg
+        return do_update, True, msg, confidence
+
+    _time_regex = re.compile(r"^(['\"])\d{4}\-\d{2}\-\d{2} \d{2}:\d{2}:\d{2}\1$")
 
     def _time_should_update(self,
                             src_item: InsertRecord,
-                            dst_item: InsertRecord) -> Tuple[bool, bool, str]:
+                            dst_item: InsertRecord) -> Tuple[bool, bool, str, int]:
         """
         Uses timestamp data to decide if a record should be updated.
         This should be exact.
@@ -351,7 +369,7 @@ old: {old_ai_val}, new: {new_ai_val}"
             msg = "*** Time comparison raised StopIteration ***"
             print(msg)
 
-        return do_update, False, msg
+        return do_update, False, msg, 1
 
     @classmethod
     def _get_column_values(cls, vals: Dict[str, str], cols: List[str]):

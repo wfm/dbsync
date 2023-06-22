@@ -1,4 +1,5 @@
 import argparse
+import os
 from pstats import SortKey
 import time
 import cProfile
@@ -109,7 +110,13 @@ def get_args():
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.default_sync_action = SyncActions[args.default_action]
-    settings.output_file = args.output
+
+    output_base = os.path.basename(args.output)
+    output_dir = os.path.dirname(args.output)
+    if output_dir == "":
+        output_dir = os.path.dirname(settings.output_file)
+    settings.output_file = os.path.join(output_dir, output_base)
+
     settings.verify_mode = args.verify
     settings.verbose_mode = not args.quiet
     settings.debug_mode = args.debug and settings.verbose_mode

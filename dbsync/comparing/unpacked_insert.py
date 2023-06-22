@@ -22,6 +22,7 @@ class InsertRecord:
     autoinc: int | None                     # autoincrement column value
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
+    is_pessimistic: bool = field(default=False) # T => comment out the SQL statement
 
 
 class UnpackedInsert:

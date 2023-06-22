@@ -13,7 +13,7 @@ from dbsync.comparing.insert_diffs import InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.keyzip import keyzip
-from dbsync.settings import Settings, SyncActions
+from dbsync.settings import Settings, SyncActions, UpdateModes
 
 
 class Comparison:
@@ -98,6 +98,8 @@ class Comparison:
 
         if action == SyncActions.MERGE:
             self._print_remark(f"\nMERGE table {table.name}")
+            update_mode = Settings.obj().get_update_mode(self.dst_table.name)
+            self._print_remark(f"  Update mode is {UpdateModes(update_mode).name}")
             self._merge_table(table, dst)
             return
 

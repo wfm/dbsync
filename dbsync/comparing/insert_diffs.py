@@ -66,14 +66,23 @@ class InsertDiffs:
 
     def _generate_update(self, record: InsertRecord) -> List[str]:
         sql = []
+        if record.is_pessimistic and Settings.obj().omit_pessimistic_sql:
+            return sql
+
         if len(record.msg) > 0:
             sql.append(f"-- {record.msg}")
-        sql.append(f"UPDATE `{self.dst_table.name}`")
+
+        leader = ""
+        if record.is_pessimistic:
+            leader = "-- "
+            sql.append("-- Pessimistically omitted:")
+
+        sql.append(f"{leader}UPDATE `{self.dst_table.name}`")
         assignments = [f"`{col}`={val}" for col, val in record.update_vals.items()]
-        sql.append(f"SET {', '.join(assignments)}")
+        sql.append(f"{leader}SET {', '.join(assignments)}")
         # always use PK in update statements
         conditions = [f"`{col}`={val}" for col, val in record.pk_vals.items()]
-        sql.append(f"WHERE {' AND '.join(conditions)};")
+        sql.append(f"{leader}WHERE {' AND '.join(conditions)};")
         return sql
 
     def generate_sql(self):

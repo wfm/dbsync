@@ -46,6 +46,19 @@ class SyncActions(Enum):
     MERGE = 3
 
 
+class UpdateModes(Enum):
+    OPTIMISTIC = 1
+    PESSIMISTIC = 2
+
+
+class RowUpdateActions(Enum):
+    COPY_SRC = 1
+    KEEP_DST = 2
+    INSERT_SRC = 3
+    DO_NOTHING = 4
+    DEFAULT = 5
+
+
 @dataclass
 class ForeignKey:
     src_table: str
@@ -300,6 +313,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
         "options": {
             "action": SyncActions.MERGE,       # was SKIP
+            "update_mode": UpdateModes.PESSIMISTIC,
             "special_rules": {
                 "option_name": alter_table_name,
                 "option_value": alter_site_url
@@ -322,7 +336,12 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
         "termmeta": {"action": SyncActions.MERGE},
-        "terms": {"action": SyncActions.MERGE},                     # was SKIP
+        "terms": {
+            "action": SyncActions.MERGE,                            # was SKIP
+            "row_level_actions": [
+                ([49], RowUpdateActions.INSERT_SRC)
+            ]
+        },
         "term_relationships": {"action": SyncActions.MERGE},
         "term_taxonomy": {"action": SyncActions.MERGE},             # was SKIP
         "usermeta": {
@@ -400,7 +419,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "yoast_migrations": {"action": SyncActions.MERGE},
         "yoast_primary_term": {"action": SyncActions.MERGE},        # was SKIP
         "yoast_seo_links": {
-            "action": SyncActions.MERGE,            # was SKIP
+            "action": SyncActions.MERGE,                            # was SKIP
             "special_rules": {
                 "url": alter_site_url
             }
@@ -408,6 +427,10 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     }
 
     default_sync_action: SyncActions = SyncActions.DEFAULT
+    default_update_mode: UpdateModes = UpdateModes.OPTIMISTIC
+    # if True, don't output anything for the pessimistically omitted statements
+    # Otherwise, generate commented-out code
+    omit_pessimistic_sql: bool = True
 
     # Controls what happens when data for a pair of
     # tables differ, but the tables don't have
@@ -568,6 +591,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             return SyncActions.SKIP
         return action
 
+    def get_update_mode(self, table_name: str) -> UpdateModes:
+        """Returns the update mode for this table"""
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        mode = options.get("update_mode", self.default_update_mode)
+        return mode
+
     def get_synthetic_primary_key(self, table_name: str) -> List[str] | None:
         """Returns the synthetic primary key (if any) for a table."""
         base_name = self.get_base_table_name(table_name)
@@ -591,6 +621,18 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         options = self.table_options.get(base_name, {})
         return options.get("use_time_based_comparison", False)
 
+    def get_row_level_action(self, table_name: str, key: List[Any]) -> RowUpdateActions:
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        actions = options.get("row_level_actions")
+        if actions is not None:
+            # TODO: inefficient, but we only have 1 action at the moment
+            for k, a in actions:
+                if k == key:
+                    return a
+
+        return RowUpdateActions.DEFAULT
+
     @classmethod
     def obj(cls, initial_settings=None):
         global _global_config
@@ -607,7 +649,9 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
 
         return _global_config
 
+
 _global_config: Settings | None = None
+
 
 #
 # From https://wp-staging.com/docs/the-wordpress-database-structure/
