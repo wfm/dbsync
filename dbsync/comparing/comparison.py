@@ -13,7 +13,7 @@ from dbsync.comparing.insert_diffs import InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.keyzip import keyzip
-from dbsync.settings import Settings, SyncActions, UpdateModes
+from dbsync.settings import ForeignKey, Settings, SyncActions, UpdateModes
 
 
 class Comparison:
@@ -174,23 +174,56 @@ class Comparison:
 {Settings.obj().get_base_table_name(dst.name)}"
             fk_id = self.insert_diffs[fk.dst_table]
 
-            for add in diffs.additions:
-                try:
-                    old_key_val = add.insert_vals[fk.src_column]
-                    # TODO i thought we were replacing NULL with None
-                    if old_key_val is not None and \
-                            old_key_val.casefold() != "null" \
-                            and int(old_key_val) > 0:
-                        new_key_val = fk_id.find_replacement_key(int(old_key_val))
-                        if new_key_val != int(old_key_val):
-                            ci.debug_print(
-                                f"    fk: {fk}, old: {old_key_val}, new: {new_key_val}")
-                            add.insert_vals[fk.src_column] = str(new_key_val)
+            if fk.weak:
+                self._patch_weak_fk(diffs, ci, fk, fk_id)
+            else:
+                self._patch_strong_fk(diffs, ci, fk, fk_id)
 
-                except ValueError as err:
-                    print(f"    Value error, table {dst.name}, value: {old_key_val}, \
-src: {fk.src_table}.{fk.src_column}, dst: {fk.dst_table}.{fk.dst_column}")
-                    print("    " + str(err))
+    def _patch_strong_fk(self,
+                         diffs: InsertDiffs,
+                         ci: CompareInsert,
+                         fk: ForeignKey,
+                         fk_id: InsertDiffs) -> None:
+        for add in diffs.additions:
+            old_key_val = add.insert_vals[fk.src_column]
+            # TODO i thought we were replacing NULL with None
+            if old_key_val is not None and \
+                    old_key_val.casefold() != "null" \
+                    and int(old_key_val) > 0:
+                new_key_val = fk_id.find_replacement_key(int(old_key_val))
+                if new_key_val != int(old_key_val):
+                    ci.debug_print(
+                        f"    old: {old_key_val}, new: {new_key_val}")
+                    add.insert_vals[fk.src_column] = str(new_key_val)
+
+    def _patch_weak_fk(self,
+                       diffs: InsertDiffs,
+                       ci: CompareInsert,
+                       fk: ForeignKey,
+                       fk_id: InsertDiffs) -> None:
+        key_regex = Settings.obj().weak_reference_regex
+        value_regex = re.compile(r"^(['\"])(\d+)\1$")
+        for add in diffs.additions:
+            step = 0
+            key = add.insert_vals[fk.key_column]
+            if key_regex.search(key):
+                step = 1
+                old_key_val = add.insert_vals[fk.src_column]
+                m = value_regex.search(old_key_val)
+                if m:
+                    old_key_val = m.group(2)
+                    step = 2
+                    int_old_key = int(old_key_val)
+                    if int_old_key > 0:
+                        step = 3
+                        int_new_key = fk_id.find_replacement_key(int_old_key, weak=True)
+                        if int_new_key != int_old_key:
+                            step = 4
+                            ci.debug_print(
+                                f"    old: {old_key_val}, new: {int_new_key} (WEAK)")
+                            add.insert_vals[fk.src_column] = str(int_new_key)
+            if step > 0 and step < 4:
+                ci.debug_print(f"    didn't map key: {key}, value: {old_key_val}, step: {step}")
 
     def _output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

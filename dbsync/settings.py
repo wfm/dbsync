@@ -65,6 +65,10 @@ class ForeignKey:
     src_column: str
     dst_table: str
     dst_column: str
+    # A "weak reference" may refer to another table or may just have data
+    # The src table will be a key,value store 
+    weak: bool = field(default=False)
+    key_column: str = field(default_factory=str)
 
 
 # TODO Switch to this?
@@ -213,19 +217,23 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("actionscheduler_logs", "action_id", "actionscheduler_actions", "action_id"),
         ForeignKey("ce4wp_abandoned_checkout", "user_id", "users", "ID"),
         ForeignKey("commentmeta", "comment_id", "comments", "comment_ID"),
+        ForeignKey("commentmeta", "meta_value", "posts", "ID", weak=True, key_column="meta_key"),
         ForeignKey("comments", "comment_post_ID", "posts", "ID"),
         ForeignKey("comments", "comment_parent", "comments", "comment_ID"),
         ForeignKey("comments", "user_id", "users", "ID"),
         ForeignKey("links", "link_owner", "users", "ID"),
         ForeignKey("lockdowns", "user_id", "users", "ID"),
         ForeignKey("login_fails", "user_id", "users", "ID"),
+        ForeignKey("options", "option_value", "posts", "ID", weak=True, key_column="option_name"),
         ForeignKey("postmeta", "post_id", "posts", "ID"),
+        ForeignKey("postmeta", "meta_value", "posts", "ID", weak=True, key_column="meta_key"),
         ForeignKey("posts", "post_author", "users", "ID"),
         ForeignKey("posts", "post_parent", "posts", "ID"),
         ForeignKey("tec_events", "post_id", "posts", "ID"),
         ForeignKey("tec_occurrences", "event_id", "tec_events", "event_id"),
         ForeignKey("tec_occurrences", "post_id", "posts", "ID"),
         ForeignKey("termmeta", "term_id", "terms", "term_id"),
+        ForeignKey("termmeta", "meta_value", "posts", "ID", weak=True, key_column="meta_key"),
         # Not sure how to handle this, since it can refer to many tables.
         # It mostly refers to the posts table, so we'll run with that.
         ForeignKey("term_relationships", "object_id", "posts", "ID"),
@@ -233,6 +241,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("term_taxonomy", "term_id", "terms", "term_id"),
         ForeignKey("term_taxonomy", "parent", "term_taxonomy", "term_taxonomy_id"),
         ForeignKey("usermeta", "user_id", "users", "ID"),
+        ForeignKey("usermeta", "meta_value", "posts", "ID", weak=True, key_column="meta_key"),
         # Only some of the Woocommerce tables are documented
         # See: https://github.com/woocommerce/woocommerce/wiki/Database-Description
         # I guessed at the others
@@ -471,6 +480,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     _table_name_regex: re = PrivateAttr()
     _integer_types_regex: re = PrivateAttr()
     _numeric_types_regex: re = PrivateAttr()
+    _weak_reference_regex: re = PrivateAttr()
 
     def __init__(self, **data):
         super().__init__(**data)
@@ -483,6 +493,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             re.compile(f"^({'|'.join(self.integer_types)})", flags=re.IGNORECASE)
         self._numeric_types_regex = \
             re.compile(f"^({'|'.join(self.numeric_types)})", flags=re.IGNORECASE)
+
+        self._weak_reference_regex = \
+            re.compile(r"^(['\"])(.+[\-_]id|_.*(Event|Venue|Organizer).*ID)\1$")
+
+    @property
+    def weak_reference_regex(self) -> re:
+        return self._weak_reference_regex
 
     def get_test_table_name_pattern(self) -> str:
         pattern = f"(?<!{self.dst_prefix}){self.tbl_prefix}"

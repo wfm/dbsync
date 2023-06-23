@@ -182,6 +182,9 @@ key cols = {src.key_column_names}")
     def _compare_update(self, src_item: InsertRecord, dst_item: InsertRecord) -> None:
         do_update, ir, old_vals = self._build_update_record(src_item, dst_item)
         if do_update:
+            msg_addition = {k: v[:30] for k, v in old_vals.items()}
+            ir.msg += f"\n-- {msg_addition}"
+
             self.update.append(ir)
 
             if self.debug_mode:
@@ -214,7 +217,11 @@ key cols = {src.key_column_names}")
         result: List[RowData] = []
         if self.dst_table_has_autoinc_column and \
                 self.dst_table.get_autoinc_val() <= self.max_src_autoinc:
-            self.dst_table.update_autoinc_val(self.max_src_autoinc + 1)
+            # TODO kludge! Why add 10? It should be 1. Explanation:
+            # I found that an auto-draft post was created between
+            # the time I dumped the DB and the time I ran the update script.
+            # I hope that burning a few auto-inc values is a harmless workaround to this.
+            self.dst_table.update_autoinc_val(self.max_src_autoinc + 10)
             self.debug_print(f"  New autoinc value is: {self.dst_table.get_autoinc_val()}")
 
         for insert_vals in self.add:
@@ -327,6 +334,9 @@ old: {old_ai_val}, new: {new_ai_val}"
     def _has_fk_timestamps(self) -> bool:
         fks = Settings.obj().get_foreign_keys(self.src_table.name)
         for fk in fks:
+            if fk.weak:
+                continue
+
             fk_name = Settings.obj().patch_table_name(fk.dst_table, self.src_table.name)
             fk_table = self.repo.get_table(fk_name)
             if fk_table.has_timestamp():
@@ -336,6 +346,9 @@ old: {old_ai_val}, new: {new_ai_val}"
     def _get_fk_timestamps(self, item: InsertRecord, table: IM.Table) -> List[str] | None:
         fks = Settings.obj().get_foreign_keys(table.name)
         for fk in fks:
+            if fk.weak:
+                continue
+
             fk_name = Settings.obj().patch_table_name(fk.dst_table, table.name)
             fk_table = self.repo.get_table(fk_name)
             if fk_table.has_timestamp():

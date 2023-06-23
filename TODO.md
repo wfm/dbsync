@@ -1,7 +1,22 @@
+# Procedure:
+0. Put sites in maintenance mode (is there a message?)
+1. Do zip and mysqldump backups and download
+2. Do WP Migrate backups of prod and stage
+3. Run the dbsync program
+4. Hand-edit the term_taxonomy updates to keep just the tribe stuff
+5. Check with Local?
+6. Upload the script
+7. Run the script
+8. Check the stage site
+9. Push to prod
+10. Check the prod site
+11. Turn off maintenance mode
+
 # TODO
 ## Urgent
 * Integration tests - in progress
-* It seems like WP Migrate exports some data that the phpMyAdmin backup misses. This causes our script to be wrong. 
+* There are IDs in the key, value tables that must be updated - in progress
+* If we update a value in a k,v table with an ID, do we need to update that?
 
 ## Medium-term
 * use ON DUPLICATE KEY UPDATE?
@@ -27,6 +42,7 @@
 * Generalize the state machine code
 
 # DONE
+* It seems like WP Migrate exports some data that the phpMyAdmin backup misses. This causes our script to be wrong. No, stuff was getting created when the site ran under Local
 * Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
 - Weird, ID is the PK
 * I've been conflating PK and auto-inc column. They're separate concepts.
@@ -118,6 +134,7 @@ ALTER TABLE `NhU_yoast_indexable_hierarchy`
 Error Code: 1062. Duplicate entry '9420' for key 'staging_nhu_postmeta.PRIMARY'
 
 6/21/23
+Is there still something to do with this?
 assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this autoinc value"
 * We could wait until we've processed all the records to remap the autoinc values
 * Every src AIV that is >= dst starting AIV could be reused.
@@ -125,23 +142,9 @@ assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this
     src AIV < dst starting AIV
 
 
-* Add WC and migrate plugins on both sites
-
-Procedure:
-0. Put sites in maintenance mode (is there a message?)
-1. Do zip and mysqldump backups and download
-2. Do WP Migrate backups of prod and stage
-3. Run the dbsync program
-4. Hand-edit the term_taxonomy updates to keep just the tribe stuff
-5. Check with Local?
-6. Upload the script
-7. Run the script
-8. Check the stage site
-9. Push to prod
-10. Check the prod site
-11. Turn off maintenance mode
-
 Done:
+* Add WC and migrate plugins on both sites - got WC
+* are we checking all the tables? i think so
 * Can we get a timestamp via a FK?
 * Check "maybe insert":
     options - doesn't matter with unique key
@@ -156,4 +159,17 @@ Done:
     term_taxonomy - hand-edit, keep tribe stuff, remove rest
     termmeta - no idea, will make pessimistic
     wc_product_download_directories
+
+
+    # TODO temporary:
+    regex = Settings.obj().weak_reference_regex
+    items = [
+        '_EventVenueID', '_VenueVenueID', '_OrganizerOrganizerID', '_EventOrganizerID',
+        'thumbnail_id', 'other-id', 'notanid'
+    ]
+
+    for item in items:
+        m = regex.search(item)
+        print(f"{item} : {m is not None}, {m}")
+    return 0
 
