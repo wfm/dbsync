@@ -2,8 +2,12 @@
 0. Put sites in maintenance mode (is there a message?)
 1. Do zip and mysqldump backups and download
 2. Do WP Migrate backups of prod and stage
-3. Run the dbsync program
-4. Hand-edit the term_taxonomy updates to keep just the tribe stuff
+3. Copy media and CSS files from prod to stage using WP Migrate backups
+* Install Endurance page cache on stage?
+* Don't copy astra-child stuff to stage
+
+4. Run the dbsync program
+4. Hand-edit the term_taxonomy updates to keep just the tribe stuff (or make it pessimistic?)
 5. Check with Local?
 6. Upload the script
 7. Run the script

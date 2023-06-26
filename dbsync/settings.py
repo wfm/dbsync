@@ -66,7 +66,7 @@ class ForeignKey:
     dst_table: str
     dst_column: str
     # A "weak reference" may refer to another table or may just have data
-    # The src table will be a key,value store 
+    # The src table will be a key,value store
     weak: bool = field(default=False)
     key_column: str = field(default_factory=str)
 
@@ -541,8 +541,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     def get_src_table_name_from_base_name(self, base_name: str) -> str:
         return f"{self.src_prefix}{self.tbl_prefix}{base_name}"
 
+    def _is_match(self, pattern: str, string: str) -> bool:
+         return re.search(pattern, string) is not None
+
     def is_dst_table(self, table_name: str) -> bool:
-        return re.search(f"^{self.dst_prefix}", table_name) is not None
+        if len(self.dst_prefix) == 0:
+            return self._is_match(f"^(?<!{self.src_prefix}){self.tbl_prefix}", table_name)
+        return self._is_match(f"^{self.dst_prefix}{self.tbl_prefix}", table_name)
 
     def is_src_table(self, table_name: str) -> bool:
         return not self.is_dst_table(table_name)

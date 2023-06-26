@@ -115,7 +115,9 @@ class InsertDiffs:
         idx = bisect_left(self.additions, old_key_val, key=lambda x: x.old_autoinc_val)
         if idx != len(self.additions) and self.additions[idx].old_autoinc_val == old_key_val:
             return self.additions[idx].new_autoinc_val
-        if weak or old_key_val < self.dst_table.get_starting_autoinc_val():
-            return old_key_val
-        raise ValueError(f"Old key {old_key_val} not found \
+        if not weak and old_key_val >= self.dst_table.get_starting_autoinc_val():
+            print(f"  WARNING: Old key {old_key_val} not found \
 and is >= starting autoinc value ({self.dst_table.get_starting_autoinc_val()})")
+        return old_key_val
+#        raise ValueError(f"Old key {old_key_val} not found \
+# and is >= starting autoinc value ({self.dst_table.get_starting_autoinc_val()})")

@@ -22,7 +22,7 @@ class InsertRecord:
     autoinc: int | None                     # autoincrement column value
     is_unique: bool                         # T => key is from unique key, F => key is from pk
     msg: str = field(default="")
-    is_pessimistic: bool = field(default=False) # T => comment out the SQL statement
+    is_pessimistic: bool = field(default=False)     # T => comment out the SQL statement
 
 
 class UnpackedInsert:
@@ -73,6 +73,7 @@ class UnpackedInsert:
         return f"UnpackedInsert for {self.name}"
 
     def __repr__(self):
+        # TODO repr output should look like instanciation
         return f"""{self.__str__()}
     columns: {self.columns}
        keys: {self.key_column_names}
@@ -179,7 +180,7 @@ class UnpackedInsert:
         return IM.Insert(self.name, self.columns, packed_vals)
 
     def sort(self) -> None:
-        """Sort and removed duplicates"""
+        """Sort by the key value"""
         if (len(self.values) < 2):
             return
 

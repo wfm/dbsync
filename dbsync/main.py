@@ -37,6 +37,12 @@ def get_args():
         help="The Wordpress table prefix",
         default=settings.tbl_prefix)
     argparser.add_argument(
+        "-r", "--reverse",
+        help="Reverse the usual order (src=>stage, dst=>Prod)",
+        default=False,
+        action="store_true"
+    )
+    argparser.add_argument(
         "--timestamp",
         help="Info to add to timestamp columns, e.g. tbl1=col1,col2;tbl2=col3",
         default="")
@@ -110,6 +116,8 @@ def get_args():
     settings.db_name = args.database
     settings.tbl_prefix = args.table_prefix
     settings.default_sync_action = SyncActions[args.default_action]
+    if args.reverse:
+        settings.src_prefix, settings.dst_prefix = settings.dst_prefix, settings.src_prefix
 
     output_base = os.path.basename(args.output)
     output_dir = os.path.dirname(args.output)
@@ -127,6 +135,8 @@ def get_args():
         print("dbsync from    :", args.filename)
         print("  database     :", args.database)
         print("  table prefix :", args.table_prefix)
+        print("  src prefix   :", settings.src_prefix)
+        print("  dst prefix   :", settings.dst_prefix)
         if args.default_action != "DEFAULT":
             print("default action :", args.default_action)
         print("  output file  :", args.output)

@@ -59,8 +59,7 @@ class CompareInsert:
         self.debug_file = self._create_debug_file()
 
         if self.debug_mode:
-            self.debug_print(f"Comparing insert for {self.dst_table.name}, \
-key cols = {src.key_column_names}")
+            self.debug_print(f"Comparing insert for {self.dst_table.name}")
 
         self.dst_autoinc = []
         if self.dst is not None:
@@ -88,7 +87,7 @@ key cols = {src.key_column_names}")
         self.update: List[InsertRecord] = []
 
     def _create_debug_file(self) -> TextIOWrapper | None:
-        if self.debug_mode:
+        if self.debug_mode and self.src is not None:
             debug_filename = f"{Settings.obj().get_base_table_name(self.src.name)}-debug.txt"
             output_dir = os.path.dirname(Settings.obj().output_file)
             debug_path = os.path.join(output_dir, "debug")
@@ -100,7 +99,7 @@ key cols = {src.key_column_names}")
         return None
 
     def debug_print(self, obj: Any) -> None:
-        if self.debug_mode:
+        if self.debug_mode and self.debug_file is not None:
             self.debug_file.write(str(obj))
             self.debug_file.write("\n")
 

@@ -127,7 +127,8 @@ Insert statements:
 
     def get_ordered_tables(self) -> List[str]:
         otn = OrderedTableNames(list(self.tables.keys()))
-        return otn.get_ordered_tables()
+        table_names = otn.get_ordered_tables()
+        return table_names
 
     def get_table(self, name: str) -> IM.Table:
         """Returns a table by name"""

@@ -48,15 +48,6 @@ class Comparison:
         x = getattr(obj, name, None)
         return callable(x)
 
-    # TODO use the version in Settings
-    def _is_dst_table(self, name):
-        dst_prefix = Settings.obj().dst_prefix
-        return re.search(f"^{dst_prefix}", name)
-
-    def _get_dst_name(self, name):
-        dst_prefix = Settings.obj().dst_prefix
-        return dst_prefix + name
-
     def _pair_inserts(self,
                       src_inserts: List[UnpackedInsert],
                       dst_inserts: List[UnpackedInsert]) \
@@ -66,9 +57,11 @@ class Comparison:
         return pairs
 
     def _output_table(self, table: IM.Table) -> None:
+        self._print_remark(f"_output_table({table.name})")
         # we don't want to output the table DDL
         # just the insert and update statements
-        if self._is_dst_table(table.name):
+        if Settings.obj().is_dst_table(table.name):
+            self._print_remark("  ...is not a src table")
             # this is not a src table
             return
 
@@ -86,7 +79,7 @@ class Comparison:
             self._print_remark(f"\nSKIP table {table.name}")
             return
 
-        dst_name = self._get_dst_name(table.name)
+        dst_name = Settings.obj().get_dst_table_name(table.name)
         dst = self.repo.get_table(dst_name)
 
         if action == SyncActions.COPY:
@@ -220,10 +213,10 @@ class Comparison:
                         if int_new_key != int_old_key:
                             step = 4
                             ci.debug_print(
-                                f"    old: {old_key_val}, new: {int_new_key} (WEAK)")
+                                f"    key: {key}, old: {old_key_val}, new: {int_new_key} (WEAK)")
                             add.insert_vals[fk.src_column] = str(int_new_key)
             if step > 0 and step < 4:
-                ci.debug_print(f"    didn't map key: {key}, value: {old_key_val}, step: {step}")
+                ci.debug_print(f"    didn't map key: {key}, value: {old_key_val}, step: {step} (WEAK)")
 
     def _output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):
