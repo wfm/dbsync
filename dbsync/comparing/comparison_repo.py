@@ -130,11 +130,11 @@ Insert statements:
         table_names = otn.get_ordered_tables()
         return table_names
 
-    def get_table(self, name: str) -> IM.Table:
+    def get_table(self, name: str, is_dst: bool = False) -> IM.Table:
         """Returns a table by name"""
         tbl = self.tables.get(name)
-        if tbl is None:
-            raise DbSyncCompareException(f"No table \"{name}\"")
+        if tbl is None and not is_dst:
+            raise DbSyncCompareException(f"There is no table named \"{name}\"")
         return tbl
 
     def get_inserts(self, name: str) -> List[UnpackedInsert]:

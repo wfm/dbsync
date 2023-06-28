@@ -349,3 +349,10 @@ def create_table(ss: SqlStatement) -> IM.Table:
             _get_post_table_modifiers(ss, table)
             return table
     raise DbSyncParseException("Invalid CREATE TABLE statement")
+
+
+def create_table_from_string(sql: str) -> IM.Table:
+    ss = SqlStatement(sql)
+    ss.eat_token(C.CREATE_TOKEN)
+    ss.eat_token(C.TABLE_TOKEN)
+    return create_table(ss)

@@ -13,6 +13,7 @@ from dbsync.comparing.insert_diffs import InsertDiffs
 from dbsync.comparing.unpacked_insert import UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
 from dbsync.keyzip import keyzip
+from dbsync.parsing.create_table_statement import create_table_from_string
 from dbsync.settings import ForeignKey, Settings, SyncActions, UpdateModes
 
 
@@ -57,11 +58,9 @@ class Comparison:
         return pairs
 
     def _output_table(self, table: IM.Table) -> None:
-        self._print_remark(f"_output_table({table.name})")
         # we don't want to output the table DDL
         # just the insert and update statements
         if Settings.obj().is_dst_table(table.name):
-            self._print_remark("  ...is not a src table")
             # this is not a src table
             return
 
@@ -80,9 +79,17 @@ class Comparison:
             return
 
         dst_name = Settings.obj().get_dst_table_name(table.name)
-        dst = self.repo.get_table(dst_name)
+        dst = self.repo.get_table(dst_name, is_dst=True)
 
-        if action == SyncActions.COPY:
+        if dst is None:
+            self._print_remark(f"\nCREATE TABLE {dst_name}")
+            dst_sql = table.generate_sql(alt_name=dst_name)
+            if len(dst_sql) > 0:
+                self._write_sql(dst_sql)
+                dst = create_table_from_string(dst_sql)
+                action = SyncActions.COPY
+
+        if action == SyncActions.COPY or dst is None:
             self._print_remark(f"\nCOPY table {table.name}")
             if (Settings.obj().has_foreign_keys(table.name)):
                 self._print_remark("  WARNING: table has foreign keys that won't be updated")
@@ -98,7 +105,7 @@ class Comparison:
             self._merge_table(table, dst)
             return
 
-        self._print_remark(f"\nNot sure what to do with table {table.name}")
+        self._print_remark(f"\nNot sure what to do with table {table.name}, action: {action}, {SyncActions(action).name}")
 
     def _copy_table(self, src: IM.Table, dst: IM.Table) -> None:
         src_inserts = self.repo.get_inserts(src.name)

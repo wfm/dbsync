@@ -2,10 +2,12 @@
 
 from dataclasses import dataclass, field
 import re
-from typing import Callable, Dict, List, Any
+import types
+from typing import Callable, Dict, List, Any, Self, Tuple
 from pydantic import BaseModel, PrivateAttr
 from enum import Enum
 
+import dbsync.settings as S
 from dbsync.exceptions import DbSyncParseException
 
 
@@ -30,33 +32,34 @@ def alter_table_name(value: str) -> str:
 def alter_site_url(value: str) -> str:
     settings = Settings.obj()
     pattern = settings.get_test_site_url_pattern()
-    repl = settings.base_uri + settings.stage_uri_path
+    repl = settings.get_test_site_url_replacement()
     return re.sub(pattern, repl, value)
 
 
-class DmlOptions(Enum):
-    DISABLE_AUTO_INCREMENT = 1  # with ALTER TABLE statements
-    GENERATE_LOCK_TABLES = 2    # lock tables, disable keys, set auto-inc value
+class DmlOptions(str, Enum):
+    DISABLE_AUTO_INCREMENT = "disable_auto_increment"     # with ALTER TABLE statements
+    GENERATE_LOCK_TABLES = "generate_lock_tables"         # lock tables, disable keys, set auto-inc
 
 
-class SyncActions(Enum):
-    DEFAULT = 0
-    SKIP = 1
-    COPY = 2
-    MERGE = 3
+class SyncActions(str, Enum):
+    DEFAULT = "default"
+    SKIP = "skip"
+    COPY = "copy"
+    MERGE = "merge"
 
 
-class UpdateModes(Enum):
-    OPTIMISTIC = 1
-    PESSIMISTIC = 2
+class UpdateModes(str, Enum):
+    OPTIMISTIC = "optimistic"
+    PESSIMISTIC = "pessimistic"
 
 
-class RowUpdateActions(Enum):
-    COPY_SRC = 1
-    KEEP_DST = 2
-    INSERT_SRC = 3
-    DO_NOTHING = 4
-    DEFAULT = 5
+class UpdateActions(str, Enum):
+    COPY_SRC = "copy_src"
+    KEEP_DST = "keep_dst"
+    INSERT_SRC = "insert_src"
+    DO_NOTHING = "do_nothing"
+    DEFAULT = "default"
+    SKIP = "skip"
 
 
 @dataclass
@@ -84,7 +87,7 @@ class TableOptions:
     special_rules: Dict[str, Callable[[str], str]] = field(default_factory=dict)
 
 
-class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
+class Settings(BaseModel):
     #
     # In Bluehost's staging scheme, the prod tables
     # are copied to tables with the prefix "staging_"
@@ -105,8 +108,9 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     dst_prefix: str = "staging_"
     tbl_prefix: str = "NhU_"
     # Bluehost changes the URLs in the content to point to the staging site
-    base_uri: str = "https://maryjoyart.com/"
-    stage_uri_path: str = "staging/1617/"
+    base_uri: str = "https://maryjoyart.com"
+    src_uri_path: str = ""
+    dst_uri_path: str = "/staging/1617"
 
     included_tables: List[str] = []
     excluded_tables: List[str] = []
@@ -150,7 +154,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
     # idea: use the auto_inc values from the time the
     # stage site was created as a guide.
     # I must not be using this data right.
-    # Data is from 3/24/23
+    # Data is from 3/24/23, staging site was created 4/7/23, i think
     high_water_marks = {
         'NhU_actionscheduler_groups': 9,
         'NhU_ce4wp_abandoned_checkout': 0,
@@ -255,27 +259,23 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         ForeignKey("wc_customer_lookup", "user_id", "users", "ID"),
         ForeignKey("wc_order_coupon_lookup", "order_id", "posts", "ID"),
         ForeignKey("wc_order_product_lookup", "order_id", "posts", "ID"),
-        ForeignKey("wc_order_product_lookup", "product_id", "posts", "ID"),   # just a guess
-        # ForeignKey("wc_order_product_lookup", "variation_id", "", ""),        # ???
+        ForeignKey("wc_order_product_lookup", "product_id", "posts", "ID"),
         ForeignKey("wc_order_product_lookup", "customer_id", "wc_customer_lookup", "customer_id"),
         ForeignKey("wc_order_stats", "order_id", "posts", "ID"),
         ForeignKey("wc_order_stats", "parent_id", "wc_order_stats", "order_id"),
         ForeignKey("wc_order_stats", "customer_id", "wc_customer_lookup", "customer_id"),
         ForeignKey("wc_order_tax_lookup", "order_id", "posts", "ID"),
         ForeignKey("wc_order_tax_lookup", "tax_rate_id", "woocommerce_tax_rates", "tax_rate_id"),
-        ForeignKey("wc_product_attributes_lookup", "product_id", "posts", "ID"),   # just a guess
-        # TODO this could be difficult to update:
-        ForeignKey("wc_product_attributes_lookup", "product_or_parent_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_product_attributes_lookup", "product_id", "posts", "ID"),
+        ForeignKey("wc_product_attributes_lookup", "product_or_parent_id", "posts", "ID"),
         ForeignKey("wc_product_attributes_lookup", "term_id", "terms", "term_id"),
-        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),
         ForeignKey("wc_reserved_stock", "order_id", "posts", "ID"),
-        ForeignKey("wc_reserved_stock", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_reserved_stock", "product_id", "posts", "ID"),
 
         ForeignKey("woocommerce_api_keys", "user_id", "users", "ID"),
-        #ForeignKey("woocommerce_downloadable_product_permissions", "download_id", "", ""),
-        ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("woocommerce_downloadable_product_permissions", "product_id", "posts", "ID"),
         ForeignKey("woocommerce_downloadable_product_permissions", "order_id", "posts", "ID"),
-        #ForeignKey("woocommerce_downloadable_product_permissions", "order_key", "", ""),
         ForeignKey("woocommerce_downloadable_product_permissions", "user_id", "users", "ID"),
         ForeignKey(
             "woocommerce_order_itemmeta", "order_item_id",
@@ -285,7 +285,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             "woocommerce_payment_tokenmeta", "payment_token_id",
             "woocommerce_payment_tokens", "token_id"),
         ForeignKey("woocommerce_payment_tokens", "user_id", "users", "ID"),
-        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),   # just a guess
+        ForeignKey("wc_product_meta_lookup", "product_id", "posts", "ID"),
         ForeignKey(
             "woocommerce_shipping_zone_locations", "zone_id",
             "woocommerce_shipping_zones", "zone_id"),
@@ -314,14 +314,14 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         "ce4wp_abandoned_checkout": {"action": SyncActions.MERGE},
         "ce4wp_contacts": {"action": SyncActions.MERGE},
         "commentmeta": {"action": SyncActions.MERGE},
-        "comments": {"action": SyncActions.MERGE},      # was COPY
+        "comments": {"action": SyncActions.MERGE},
         "e_events": {"action": SyncActions.MERGE},
         "links": {"action": SyncActions.MERGE},
         "lockdowns": {"action": SyncActions.MERGE},
         "login_fails": {"action": SyncActions.MERGE},
         "nfd_data_event_queue": {"action": SyncActions.MERGE},
         "options": {
-            "action": SyncActions.MERGE,                # was SKIP
+            "action": SyncActions.MERGE,
             "update_mode": UpdateModes.PESSIMISTIC,
             "special_rules": {
                 "option_name": alter_table_name,
@@ -340,7 +340,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
                 "post_content": alter_site_url
             }
         },
-        "sib_model_forms": {"action": SyncActions.MERGE},           # was SKIP
+        "sib_model_forms": {"action": SyncActions.MERGE},
         "sib_model_users": {"action": SyncActions.MERGE},
         "tec_events": {"action": SyncActions.MERGE},
         "tec_occurrences": {"action": SyncActions.MERGE},
@@ -349,13 +349,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             "update_mode": UpdateModes.PESSIMISTIC,
         },
         "terms": {
-            "action": SyncActions.MERGE,                            # was SKIP
+            "action": SyncActions.MERGE,
             "row_level_actions": [
-                ([49], RowUpdateActions.INSERT_SRC)
+                ([49], UpdateActions.INSERT_SRC)    # TODO tuple not preserved through json round-trip
             ]
         },
         "term_relationships": {"action": SyncActions.MERGE},
-        "term_taxonomy": {"action": SyncActions.MERGE},             # was SKIP
+        "term_taxonomy": {"action": SyncActions.MERGE},
         "usermeta": {
             "action": SyncActions.MERGE,
             "synthetic_unique_key": ["user_id", "meta_key"],
@@ -366,17 +366,17 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         },
         "users": {"action": SyncActions.MERGE},
         "wc_admin_notes": {
-            "action": SyncActions.MERGE,                            # was SKIP
+            "action": SyncActions.MERGE,
             "synthetic_unique_key": ["name"]
         },
         "wc_admin_note_actions": {
-            "action": SyncActions.MERGE,                            # was SKIP
+            "action": SyncActions.MERGE,
             "synthetic_unique_key": ["name"],
             "special_rules": {
                 "query": alter_site_url
             }
         },
-        "wc_category_lookup": {"action": SyncActions.MERGE},        # was SKIP
+        "wc_category_lookup": {"action": SyncActions.MERGE},
         "wc_customer_lookup": {"action": SyncActions.MERGE},        # was COPY
         "wc_download_log": {"action": SyncActions.MERGE},
         "wc_order_coupon_lookup": {"action": SyncActions.MERGE},
@@ -425,13 +425,13 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             }
         },
         "yoast_indexable_hierarchy": {
-            "action": SyncActions.MERGE,        # was SKIP
+            "action": SyncActions.MERGE,
             "synthetic_primary_key": ["indexable_id"]
         },
         "yoast_migrations": {"action": SyncActions.MERGE},
-        "yoast_primary_term": {"action": SyncActions.MERGE},        # was SKIP
+        "yoast_primary_term": {"action": SyncActions.MERGE},
         "yoast_seo_links": {
-            "action": SyncActions.MERGE,                            # was SKIP
+            "action": SyncActions.MERGE,
             "special_rules": {
                 "url": alter_site_url
             }
@@ -497,16 +497,33 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         self._weak_reference_regex = \
             re.compile(r"^(['\"])(.+[\-_]id|_.*(Event|Venue|Organizer).*ID)\1$")
 
+        # if we are rehydrating from json, add function references in the special rules
+        for opt in self.table_options.values():
+            if "special_rules" in opt:
+                sr = opt["special_rules"]
+                for key in sr:
+                    if isinstance(sr[key], str):
+                        sr[key] = getattr(S, sr[key])
+
     @property
     def weak_reference_regex(self) -> re:
         return self._weak_reference_regex
 
     def get_test_table_name_pattern(self) -> str:
-        pattern = f"(?<!{self.dst_prefix}){self.tbl_prefix}"
-        return pattern
+        if len(self.src_prefix) == 0:
+            return f"(?<!{self.dst_prefix}){self.tbl_prefix}"
+        return f"{self.src_prefix}{self.tbl_prefix}"
 
     def get_test_site_url_pattern(self) -> str:
-        return r"\b" + self.base_uri + f"(?!{self.stage_uri_path})"
+        assert len(self.src_uri_path) > 0 or len(self.dst_uri_path), \
+            "Assumption: staging url path is different from prod"
+        if len(self.src_uri_path) == 0:
+            return r"\b" + self.base_uri + f"(?!{self.dst_uri_path})"
+
+        return r"\b" + self.base_uri + self.src_uri_path
+
+    def get_test_site_url_replacement(self) -> str:
+        return self.base_uri + self.dst_uri_path
 
     def get_test_patterns(self) -> List[re.Pattern]:
         result = [
@@ -542,7 +559,7 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         return f"{self.src_prefix}{self.tbl_prefix}{base_name}"
 
     def _is_match(self, pattern: str, string: str) -> bool:
-         return re.search(pattern, string) is not None
+        return re.search(pattern, string) is not None
 
     def is_dst_table(self, table_name: str) -> bool:
         if len(self.dst_prefix) == 0:
@@ -589,7 +606,6 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
             return self.timestamp_cols[base_name]
         return []
 
-    # TODO this isn't used
     def get_high_water(self, table_name) -> int:
         """
         Returns the auto_inc value from an earlier backup
@@ -651,37 +667,56 @@ class Settings(BaseModel, allow_mutation=True, alias_generator=to_camel):
         options = self.table_options.get(base_name, {})
         return options.get("use_time_based_comparison", False)
 
-    def get_row_level_action(self, table_name: str, key: List[Any]) -> RowUpdateActions:
+    def get_row_level_action(self, table_name: str, key: List[Any]) -> UpdateActions:
         base_name = self.get_base_table_name(table_name)
         options = self.table_options.get(base_name, {})
         actions = options.get("row_level_actions")
         if actions is not None:
             # TODO: inefficient, but we only have 1 action at the moment
-            for k, a in actions:
+            for k, a in actions.items():
                 if k == key:
                     return a
 
-        return RowUpdateActions.DEFAULT
+        return UpdateActions.DEFAULT
+
+    def get_col_level_actions(self, table_name: str) -> \
+            List[Tuple[str, str, UpdateActions]] | None:
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        actions = options.get("col_level_actions")
+        if actions is not None:
+            return [(act[0], act[1], act[2]) for act in actions]
+        return None
+
+    def dump(self, filename: str) -> None:
+        with open(filename, "w", encoding="utf8") as file:
+            file.write(self.json())
 
     @classmethod
-    def obj(cls, initial_settings=None):
-        global _global_config
+    def obj(cls, initial_settings: Self = None, from_filename: str = None):
+        global _global_settings
 
-        if _global_config is None:
-            if initial_settings is None:
-                _global_config = cls()
+        if _global_settings is None:
+            if from_filename is not None:
+                _global_settings = Settings.parse_file(from_filename)
+            elif initial_settings is not None:
+                _global_settings = initial_settings
             else:
-                _global_config = initial_settings
-            _global_config.init()
-        elif initial_settings is not None:
+                _global_settings = cls()
+        elif initial_settings is not None or from_filename is not None:
             msg = "You missed your chance to initialize the settings"
             raise DbSyncParseException(msg)
 
-        return _global_config
+        return _global_settings
+
+    class Config:
+        allow_mutation = True
+        json_encoders = {
+            types.FunctionType: lambda f: f.__name__
+        }
 
 
-_global_config: Settings | None = None
-
+_global_settings: Settings | None = None
 
 #
 # From https://wp-staging.com/docs/the-wordpress-database-structure/

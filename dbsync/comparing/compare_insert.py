@@ -11,7 +11,7 @@ from dbsync.comparing.comparison_repo import ComparisonRepo
 from dbsync.comparing.insert_diffs import InsertDiffs, RowData
 from dbsync.comparing.unpacked_insert import InsertRecord, UnpackedInsert
 from dbsync.exceptions import DbSyncCompareException
-from dbsync.settings import RowUpdateActions, Settings, UpdateModes
+from dbsync.settings import UpdateActions, Settings, UpdateModes
 
 
 class CompareInsert:
@@ -137,10 +137,13 @@ class CompareInsert:
             if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
-                if self.debug_mode:
-                    self._debug_insert(src_item, dst_item)
+                col_update_action = self._apply_col_level_actions(src_item)
+                if col_update_action != UpdateActions.SKIP:
+                    if self.debug_mode:
+                        self._debug_insert(src_item, dst_item)
 
-                self.add.append(src_item.insert_vals)
+                    self.add.append(src_item.insert_vals)
+                
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
                 # skip over dst records until we "catch up"
@@ -171,7 +174,7 @@ class CompareInsert:
         self.debug_print(f"< {src_item.key}  {dst_key} => INSERT src record")
 
     def _debug_skip_dst(self, src_item, dst_item):
-        self.debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
+        # self.debug_print(f"> {src_item.key}  {dst_item.key} => SKIP dst")
         hwm = Settings.obj().get_high_water(self.src_table.name)
         dst_pk_val = int(dst_item.pk[0])
         if dst_pk_val < hwm:
@@ -181,7 +184,8 @@ class CompareInsert:
     def _compare_update(self, src_item: InsertRecord, dst_item: InsertRecord) -> None:
         do_update, ir, old_vals = self._build_update_record(src_item, dst_item)
         if do_update:
-            msg_addition = {k: v[:30] for k, v in old_vals.items()}
+            debug_msg = ir.msg
+            msg_addition = {k: v[:80] for k, v in old_vals.items()}
             ir.msg += f"\n-- {msg_addition}"
 
             self.update.append(ir)
@@ -189,10 +193,10 @@ class CompareInsert:
             if self.debug_mode:
                 cols = list(ir.update_vals.keys())
                 self.debug_print(f"U {src_item.key} ({src_item.pk})  {dst_item.key} ({dst_item.pk}) => {cols}")
-                self.debug_print(f"  {ir.msg}")
-                update_print = {k: v[:50] for k, v in ir.update_vals.items()}
+                self.debug_print(f"  {debug_msg}")
+                update_print = {k: v[:80] for k, v in ir.update_vals.items()}
                 self.debug_print(f"  NEW: {update_print}")
-                old_print = {k: v[:50] for k, v in old_vals.items()}
+                old_print = {k: v[:80] for k, v in old_vals.items()}
                 self.debug_print(f"  OLD: {old_print}")
 
     def _msg_for_update(self,
@@ -280,25 +284,23 @@ old: {old_ai_val}, new: {new_ai_val}"
                              dst_item: InsertRecord) -> Tuple[bool, InsertRecord | None, Dict[str, str] | None]:
         row_action = Settings.obj().get_row_level_action(self.src_table.name, src_item.key)
         match row_action:
-            case RowUpdateActions.INSERT_SRC:
+            case UpdateActions.INSERT_SRC:
                 self.debug_print(f"  Inserting {src_item.key} based on row-level action")
                 self.add.append(src_item.insert_vals)
                 do_update = False
-            case RowUpdateActions.DEFAULT:
-                do_update, pk_based, msg, confidence = self._should_update(src_item, dst_item)
+            case UpdateActions.DEFAULT:
+                do_update, _, msg, confidence = self._should_update(src_item, dst_item)
             case _:
-                raise DbSyncCompareException(f"Row action {RowUpdateActions(row_action).name} is not implemented")
+                raise DbSyncCompareException(f"Row action {UpdateActions(row_action).name} is not implemented")
+
+        col_update_action = self._apply_col_level_actions(src_item)
+        if col_update_action == UpdateActions.SKIP:
+            do_update = False
 
         if do_update:
             # TODO use separate InsertRecord and UpdateRecord?
             update_vals, old_vals = self._update_only_necessary_cols(src_item, dst_item)
             if len(update_vals) > 0:
-                # if pk_based:
-                #     msg = self._msg_for_update(update_vals, old_vals, msg)
-
-                # if src_item.is_unique:
-                #     msg += f"\n-- Unique key: {src_item.key_vals}"
-
                 update_mode = Settings.obj().get_update_mode(self.dst_table.name)
                 is_pessimistic = update_mode == UpdateModes.PESSIMISTIC and confidence <= 0
 
@@ -315,6 +317,16 @@ old: {old_ai_val}, new: {new_ai_val}"
                     is_pessimistic)
                 return True, ir, old_vals
         return False, None, None
+
+    def _apply_col_level_actions(self, src_item: InsertRecord) -> UpdateActions:
+        col_update_action = UpdateActions.DEFAULT
+        col_actions = Settings.obj().get_col_level_actions(self.src_table.name)
+        if col_actions is not None:
+            for col_action in col_actions:
+                col_name, pattern, new_update_action = col_action
+                if re.search(pattern, src_item.insert_vals[col_name]):
+                    col_update_action = new_update_action
+        return col_update_action
 
     def _should_update(self,
                        src_item: InsertRecord,

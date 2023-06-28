@@ -20,6 +20,7 @@ SEMICOLON_TOKEN = sql.Token(T.Punctuation, ";")
 EQUALS_TOKEN = sql.Token(T.Comparison, "=")
 
 VALUES_TOKEN = sql.Token(T.Keyword, "VALUES")
+CREATE_TOKEN = sql.Token(T.DDL, "CREATE")
 TABLE_TOKEN = sql.Token(T.Keyword, "TABLE")
 ADD_TOKEN = sql.Token(T.Keyword, "ADD")
 PRIMARY_TOKEN = sql.Token(T.Keyword, "PRIMARY")

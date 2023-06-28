@@ -18,11 +18,10 @@
 
 # TODO
 ## Urgent
-* Integration tests - in progress
-* There are IDs in the key, value tables that must be updated - in progress
-* If we update a value in a k,v table with an ID, do we need to update that?
+
 
 ## Medium-term
+* decent test coverage
 * use ON DUPLICATE KEY UPDATE?
 * Key columns may have lengths
 * Some "comments" are actually MySQL-specific commands, like /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;
@@ -38,7 +37,6 @@
 * Why are so many UnpackedInsert objects created for each table?
 
 ## Future
-* Implement stage -> prod
 * Implement sync between 2 databases
 * Support more flavors of insert statements
 * Support other DML statements?
@@ -46,6 +44,26 @@
 * Generalize the state machine code
 
 # DONE
+* Implement stage -> prod
+* Integration tests - in progress
+* There are IDs in the key, value tables that must be updated - in progress
+* If we update a value in a k,v table with an ID, do we need to update that?
+* Add WC and migrate plugins on both sites 
+* are we checking all the tables? i think so
+* Can we get a timestamp via a FK?
+* Check "maybe insert":
+    options - doesn't matter with unique key
+* Updates that should really be inserts:
+    -- PKs are equal, MAYBE update, MAYBE insert src, distance: 24
+    -- Was: {'name': "'Playful Art'", 'slug': "'playful-art'"}
+    UPDATE `staging_NhU_terms`
+    SET `name`='Market', `slug`='market'
+    WHERE `term_id`=49;
+* Which tables should be pessimistic? These tables use FK comparisons:
+    options - is pessimistic
+    term_taxonomy - hand-edit, keep tribe stuff, remove rest
+    termmeta - no idea, will make pessimistic
+    wc_product_download_directories
 * It seems like WP Migrate exports some data that the phpMyAdmin backup misses. This causes our script to be wrong. No, stuff was getting created when the site ran under Local
 * Returns 28 rows: select ID,count(\*) from maryjoya_WP5Z2.NhU_posts p group by p.post_date_gmt having count(\*) > 1;
 - Weird, ID is the PK
@@ -83,6 +101,33 @@
 * Check autoincrement
 * Use LOCK TABLES `tbl_test0` WRITE; and UNLOCK TABLES?
 * Get it to work with dump from MySQL workbench
+
+===========
+2023-06-18
+* filter out data from before 4/7/23 - those records must have been deleted from dst
+* add FKs for tables we added, _wps_
+Trying to merge from stage to prod. There is less data to migrate:
+* _posts - records need to be hand-selected
+* _terms - a couple of updates should really be inserts
+* _term_taxonomy - don't bother updating counts?
+* _options - update any rows?
+* _postmeta - many inserts are for test orders which we don't need. Will be reduced if we reduce post inserts
+* _termmeta - would update 3 records, if it were optimistic. Inserts should be ok
+* _usermeta - tempted to skip 
+* _wc_admin_note_actions - skip?
+* _wc_category_lookup - ok, i think
+* _wc_order_product_lookup - skip
+* _wc_order_stats - skip
+* _wc_order_tax_lookup - skip
+* _wc_product_meta_lookup - skip
+* _woocommerce_order_itemmeta - skip
+* _wps tables - skip these?
+* _yoast_indexable - skip
+* _yoast_indexable_hierarchy - skip
+* _yoast_primary_term - skip
+* _yoast_seo_links - skip
+
+Tables not on the list could be skipped.
 
 ===========
 2023-06-14:
@@ -147,22 +192,6 @@ assert old_pk_val < self.dst_table.get_starting_autoinc_val(), "Can't reuse this
 
 
 Done:
-* Add WC and migrate plugins on both sites - got WC
-* are we checking all the tables? i think so
-* Can we get a timestamp via a FK?
-* Check "maybe insert":
-    options - doesn't matter with unique key
-* Updates that should really be inserts:
-    -- PKs are equal, MAYBE update, MAYBE insert src, distance: 24
-    -- Was: {'name': "'Playful Art'", 'slug': "'playful-art'"}
-    UPDATE `staging_NhU_terms`
-    SET `name`='Market', `slug`='market'
-    WHERE `term_id`=49;
-* Which tables should be pessimistic? These tables use FK comparisons:
-    options - is pessimistic
-    term_taxonomy - hand-edit, keep tribe stuff, remove rest
-    termmeta - no idea, will make pessimistic
-    wc_product_download_directories
 
 
     # TODO temporary:
@@ -177,3 +206,32 @@ Done:
         print(f"{item} : {m is not None}, {m}")
     return 0
 
+
+    @staticmethod
+    def load_from_file(from_filename: str) -> Self:
+        with open(from_filename, "r", encoding="utf8") as file:
+            config = json.load(file, )
+            settings = Settings(**config)
+            return settings
+
+    @staticmethod
+    def try_convert_to_enum(x: Any) -> Any:
+        if isinstance(x, str) and x.startswith("__enum__"):
+            parts = x.split(".")
+            enum_type = getattr(S, parts[1])
+            value = getattr(enum_type, parts[2])
+            print(f"to_enum({x}), value: {value} ({value.name})")
+            return value
+        return x
+
+    @staticmethod
+    def decode_json_hack(item: Any) -> None:
+        if hasattr(item, "items"):
+            for k, v in item.items():
+                item[k] = Settings.decode_json_hack(v)
+        elif hasattr(item, "__getitem__"):
+            for i in range(len(item)):
+                item[i] = Settings.decode_json_hack(item[i])
+        else:
+            item = Settings.try_convert_to_enum(item)
+        return item

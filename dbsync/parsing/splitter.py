@@ -33,6 +33,11 @@ class Splitter:
     def _classify_statement(self, text: str) -> int:
         ss = SqlStatement(text)
         token = ss.get_token()
+        if token is None:
+            print("Token is None. SQL:")
+            print(text)
+            return 1
+
         if token.match(T.Keyword, "USE"):
             us = use_statement(ss)
             self.in_target = us.value == self.target_database

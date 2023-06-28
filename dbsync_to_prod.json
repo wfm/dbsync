@@ -1,0 +1,809 @@
+{
+  "db_name": "maryjoya_WP5Z2",
+  "src_prefix": "staging_",
+  "dst_prefix": "",
+  "tbl_prefix": "NhU_",
+  "base_uri": "https://maryjoyart.com",
+  "src_uri_path": "/staging/1617",
+  "dst_uri_path": "",
+  "included_tables": [],
+  "excluded_tables": [],
+  "timestamp_cols": {
+    "actionscheduler_actions": ["scheduled_date_gmt"],
+    "actionscheduler_claims": ["date_created_gmt"],
+    "actionscheduler_logs": ["log_date_gmt"],
+    "ce4wp_abandoned_checkout": [
+      "checkout_recovered",
+      "checkout_updated",
+      "checkout_created"
+    ],
+    "comments": ["comment_date_gmt"],
+    "e_events": ["created_at"],
+    "links": ["link_updated"],
+    "lockdowns": ["release_date", "lockdown_date"],
+    "login_fails": ["login_attempt_date"],
+    "nfd_data_event_queue": ["created_at"],
+    "posts": ["post_modified_gmt", "post_date_gmt"],
+    "sib_model_users": ["user_added_date"],
+    "tec_events": ["updated_at"],
+    "tec_occurrences": ["updated_at"],
+    "users": ["user_registered"],
+    "wc_admin_notes": ["date_created"],
+    "wc_customer_lookup": ["date_last_active", "date_registered"],
+    "wc_download_log": ["timestamp"],
+    "wc_order_coupon_lookup": ["date_created"],
+    "wc_order_product_lookup": ["date_created"],
+    "wc_order_stats": ["date_completed", "date_paid", "date_created"],
+    "wc_order_tax_lookup": ["date_created"],
+    "wc_reserved_stock": ["timestamp"],
+    "wc_webhooks": ["date_modified_gmt", "date_created_gmt"],
+    "woocommerce_downloadable_product_permissions": ["access_granted"],
+    "woocommerce_log": ["timestamp"],
+    "wpforms_logs": ["create_at"],
+    "wpforms_tasks_meta": ["date"],
+    "wpmailsmtp_debug_events": ["created_at"],
+    "wpmailsmtp_tasks_meta": ["date"],
+    "yoast_indexable": ["updated_at", "created_at"],
+    "yoast_primary_term": ["updated_at", "created_at"]
+  },
+  "foreign_keys": [
+    {
+      "src_table": "actionscheduler_actions",
+      "src_column": "group_id",
+      "dst_table": "actionscheduler_groups",
+      "dst_column": "group_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "actionscheduler_actions",
+      "src_column": "claim_id",
+      "dst_table": "actionscheduler_claims",
+      "dst_column": "claim_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "actionscheduler_logs",
+      "src_column": "action_id",
+      "dst_table": "actionscheduler_actions",
+      "dst_column": "action_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "ce4wp_abandoned_checkout",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "commentmeta",
+      "src_column": "comment_id",
+      "dst_table": "comments",
+      "dst_column": "comment_ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "commentmeta",
+      "src_column": "meta_value",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": true,
+      "key_column": "meta_key"
+    },
+    {
+      "src_table": "comments",
+      "src_column": "comment_post_ID",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "comments",
+      "src_column": "comment_parent",
+      "dst_table": "comments",
+      "dst_column": "comment_ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "comments",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "links",
+      "src_column": "link_owner",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "lockdowns",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "login_fails",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "options",
+      "src_column": "option_value",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": true,
+      "key_column": "option_name"
+    },
+    {
+      "src_table": "postmeta",
+      "src_column": "post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "postmeta",
+      "src_column": "meta_value",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": true,
+      "key_column": "meta_key"
+    },
+    {
+      "src_table": "posts",
+      "src_column": "post_author",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "posts",
+      "src_column": "post_parent",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "tec_events",
+      "src_column": "post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "tec_occurrences",
+      "src_column": "event_id",
+      "dst_table": "tec_events",
+      "dst_column": "event_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "tec_occurrences",
+      "src_column": "post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "termmeta",
+      "src_column": "term_id",
+      "dst_table": "terms",
+      "dst_column": "term_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "termmeta",
+      "src_column": "meta_value",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": true,
+      "key_column": "meta_key"
+    },
+    {
+      "src_table": "term_relationships",
+      "src_column": "object_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "term_relationships",
+      "src_column": "term_taxonomy_id",
+      "dst_table": "term_taxonomy",
+      "dst_column": "term_taxonomy_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "term_taxonomy",
+      "src_column": "term_id",
+      "dst_table": "terms",
+      "dst_column": "term_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "term_taxonomy",
+      "src_column": "parent",
+      "dst_table": "term_taxonomy",
+      "dst_column": "term_taxonomy_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "usermeta",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "usermeta",
+      "src_column": "meta_value",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": true,
+      "key_column": "meta_key"
+    },
+    {
+      "src_table": "wc_download_log",
+      "src_column": "permission_id",
+      "dst_table": "woocommerce_downloadable_product_permissions",
+      "dst_column": "permission_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_download_log",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_webhooks",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_admin_note_actions",
+      "src_column": "note_id",
+      "dst_table": "wc_admin_notes",
+      "dst_column": "note_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_customer_lookup",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_coupon_lookup",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_product_lookup",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_product_lookup",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_product_lookup",
+      "src_column": "customer_id",
+      "dst_table": "wc_customer_lookup",
+      "dst_column": "customer_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_stats",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_stats",
+      "src_column": "parent_id",
+      "dst_table": "wc_order_stats",
+      "dst_column": "order_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_stats",
+      "src_column": "customer_id",
+      "dst_table": "wc_customer_lookup",
+      "dst_column": "customer_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_tax_lookup",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_order_tax_lookup",
+      "src_column": "tax_rate_id",
+      "dst_table": "woocommerce_tax_rates",
+      "dst_column": "tax_rate_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_product_attributes_lookup",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_product_attributes_lookup",
+      "src_column": "product_or_parent_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_product_attributes_lookup",
+      "src_column": "term_id",
+      "dst_table": "terms",
+      "dst_column": "term_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_product_meta_lookup",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_reserved_stock",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_reserved_stock",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_api_keys",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_downloadable_product_permissions",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_downloadable_product_permissions",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_downloadable_product_permissions",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_order_itemmeta",
+      "src_column": "order_item_id",
+      "dst_table": "woocommerce_order_items",
+      "dst_column": "order_item_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_order_items",
+      "src_column": "order_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_payment_tokenmeta",
+      "src_column": "payment_token_id",
+      "dst_table": "woocommerce_payment_tokens",
+      "dst_column": "token_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_payment_tokens",
+      "src_column": "user_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "wc_product_meta_lookup",
+      "src_column": "product_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_shipping_zone_locations",
+      "src_column": "zone_id",
+      "dst_table": "woocommerce_shipping_zones",
+      "dst_column": "zone_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_shipping_zone_methods",
+      "src_column": "zone_id",
+      "dst_table": "woocommerce_shipping_zones",
+      "dst_column": "zone_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "woocommerce_tax_rate_locations",
+      "src_column": "tax_rate_id",
+      "dst_table": "woocommerce_tax_rates",
+      "dst_column": "tax_rate_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_indexable",
+      "src_column": "object_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_indexable",
+      "src_column": "author_id",
+      "dst_table": "users",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_indexable",
+      "src_column": "post_parent",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_primary_term",
+      "src_column": "post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_primary_term",
+      "src_column": "term_id",
+      "dst_table": "terms",
+      "dst_column": "term_id",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_seo_links",
+      "src_column": "post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    },
+    {
+      "src_table": "yoast_seo_links",
+      "src_column": "target_post_id",
+      "dst_table": "posts",
+      "dst_column": "ID",
+      "weak": false,
+      "key_column": ""
+    }
+  ],
+  "default_sync_action": "default",
+  "default_update_mode": "optimistic",
+  "omit_pessimistic_sql": true,
+  "update_tables_without_timestamp": true,
+  "update_specific_tables_without_timestamp": { "usermeta": true },
+  "output_file": "./output/output.sql",
+  "file_descriptor": null,
+  "verbose_mode": true,
+  "debug_mode": false,
+  "verify_mode": false,
+  "dml_options": "generate_lock_tables",
+  "high_water_marks": {
+    "NhU_actionscheduler_groups": 9,
+    "NhU_ce4wp_abandoned_checkout": 0,
+    "NhU_ce4wp_contacts": 0,
+    "NhU_commentmeta": 0,
+    "NhU_comments": 14,
+    "NhU_e_events": 0,
+    "NhU_links": 0,
+    "NhU_postmeta": 7359,
+    "NhU_posts": 1434,
+    "NhU_sib_model_forms": 2,
+    "NhU_sib_model_users": 0,
+    "NhU_tec_events": 5,
+    "NhU_tec_occurrences": 5,
+    "NhU_termmeta": 18,
+    "NhU_terms": 47,
+    "NhU_term_relationships": -1,
+    "NhU_term_taxonomy": 47,
+    "NhU_usermeta": 199,
+    "NhU_users": 3,
+    "NhU_wc_admin_notes": 51,
+    "NhU_wc_admin_note_actions": 2278,
+    "NhU_wc_category_lookup": -1,
+    "NhU_wc_customer_lookup": 2,
+    "NhU_wc_download_log": 0,
+    "NhU_wc_order_coupon_lookup": -1,
+    "NhU_wc_order_product_lookup": -1,
+    "NhU_wc_order_stats": -1,
+    "NhU_wc_order_tax_lookup": -1,
+    "NhU_wc_product_attributes_lookup": -1,
+    "NhU_wc_product_download_directories": 3,
+    "NhU_wc_product_meta_lookup": -1,
+    "NhU_wc_rate_limits": 0,
+    "NhU_wc_reserved_stock": -1,
+    "NhU_wc_tax_rate_classes": 0,
+    "NhU_wc_webhooks": 0,
+    "NhU_woocommerce_api_keys": 0,
+    "NhU_woocommerce_attribute_taxonomies": 2,
+    "NhU_woocommerce_downloadable_product_permissions": 0,
+    "NhU_woocommerce_log": 0,
+    "NhU_woocommerce_order_itemmeta": 44,
+    "NhU_woocommerce_order_items": 7,
+    "NhU_woocommerce_payment_tokenmeta": 0,
+    "NhU_woocommerce_payment_tokens": 0,
+    "NhU_woocommerce_sessions": 567,
+    "NhU_woocommerce_shipping_zones": 3,
+    "NhU_woocommerce_shipping_zone_locations": 12,
+    "NhU_woocommerce_shipping_zone_methods": 6,
+    "NhU_woocommerce_tax_rates": 2,
+    "NhU_woocommerce_tax_rate_locations": 3,
+    "NhU_wpforms_tasks_meta": 23,
+    "NhU_wpmailsmtp_debug_events": 3,
+    "NhU_wpmailsmtp_tasks_meta": 0,
+    "NhU_yoast_indexable": 416,
+    "NhU_yoast_indexable_hierarchy": -1,
+    "NhU_yoast_migrations": 24,
+    "NhU_yoast_primary_term": 8,
+    "NhU_yoast_seo_links": 2190
+  },
+  "table_options": {
+    "actionscheduler_actions": { "action": "skip" },
+    "actionscheduler_claims": { "action": "merge" },
+    "actionscheduler_groups": { "action": "merge" },
+    "actionscheduler_logs": { "action": "skip" },
+    "ce4wp_abandoned_checkout": { "action": "merge" },
+    "ce4wp_contacts": { "action": "merge" },
+    "commentmeta": { "action": "merge" },
+    "comments": { "action": "merge" },
+    "e_events": { "action": "merge" },
+    "links": { "action": "merge" },
+    "lockdowns": { "action": "merge" },
+    "login_fails": { "action": "skip" },
+    "nfd_data_event_queue": { "action": "merge" },
+    "options": {
+      "action": "merge",
+      "update_mode": "pessimistic",
+      "special_rules": {
+        "option_name": "alter_table_name",
+        "option_value": "alter_site_url"
+      },
+      "col_level_actions": [
+        ["option_name", "_transient_", "skip"]
+      ]
+    },
+    "postmeta": {
+      "action": "merge",
+      "synthetic_unique_key": ["post_id", "meta_key"]
+    },
+    "posts": {
+      "action": "merge",
+      "use_time_based_comparison": true,
+      "special_rules": {
+        "guid": "alter_site_url",
+        "post_content": "alter_site_url"
+      }
+    },
+    "sib_model_forms": { "action": "merge" },
+    "sib_model_users": { "action": "merge" },
+    "tec_events": { "action": "merge" },
+    "tec_occurrences": { "action": "merge" },
+    "termmeta": { "action": "merge", "update_mode": "pessimistic" },
+    "terms": { "action": "merge" },
+    "term_relationships": { "action": "merge" },
+    "term_taxonomy": {
+        "action": "merge",
+        "special_rules": {
+            "description": "alter_table_name"
+        }
+    },
+    "usermeta": {
+      "action": "merge",
+      "synthetic_unique_key": ["user_id", "meta_key"],
+      "special_rules": {
+        "meta_key": "alter_table_name",
+        "meta_value": "alter_table_name"
+      }
+    },
+    "users": { "action": "skip" },
+    "wc_admin_notes": { "action": "skip", "synthetic_unique_key": ["name"] },
+    "wc_admin_note_actions": {
+      "action": "merge",
+      "synthetic_unique_key": ["name"],
+      "special_rules": { "query": "alter_site_url" }
+    },
+    "wc_category_lookup": { "action": "merge" },
+    "wc_customer_lookup": { "action": "merge" },
+    "wc_download_log": { "action": "merge" },
+    "wc_order_coupon_lookup": { "action": "merge" },
+    "wc_order_product_lookup": { "action": "merge" },
+    "wc_order_stats": { "action": "merge" },
+    "wc_order_tax_lookup": { "action": "merge" },
+    "wc_product_attributes_lookup": { "action": "merge" },
+    "wc_product_download_directories": {
+      "action": "merge",
+      "special_rules": { "url": "alter_site_url" }
+    },
+    "wc_product_meta_lookup": { "action": "merge" },
+    "wc_rate_limits": { "action": "merge" },
+    "wc_reserved_stock": { "action": "merge" },
+    "wc_tax_rate_classes": { "action": "merge" },
+    "wc_webhooks": { "action": "merge" },
+    "woocommerce_api_keys": { "action": "merge" },
+    "woocommerce_attribute_taxonomies": { "action": "merge" },
+    "woocommerce_downloadable_product_permissions": { "action": "merge" },
+    "woocommerce_log": { "action": "merge" },
+    "woocommerce_order_itemmeta": { "action": "merge" },
+    "woocommerce_order_items": { "action": "skip" },
+    "woocommerce_payment_tokenmeta": { "action": "merge" },
+    "woocommerce_payment_tokens": { "action": "merge" },
+    "woocommerce_sessions": { "action": "skip" },
+    "woocommerce_shipping_zones": { "action": "merge" },
+    "woocommerce_shipping_zone_locations": { "action": "merge" },
+    "woocommerce_shipping_zone_methods": { "action": "merge" },
+    "woocommerce_tax_rates": { "action": "merge" },
+    "woocommerce_tax_rate_locations": { "action": "merge" },
+    "wpforms_logs": { "action": "merge" },
+    "wpforms_payment_meta": { "action": "merge" },
+    "wpforms_payments": { "action": "merge" },
+    "wpforms_tasks_meta": { "action": "merge" },
+    "wpmailsmtp_debug_events": { "action": "merge" },
+    "wpmailsmtp_tasks_meta": { "action": "merge" },
+    "wps_hit": { "action": "copy" },
+    "wps_index": { "action": "copy" },
+    "wps_key": { "action": "copy" },
+    "wps_object_term": { "action": "copy" },
+    "wps_object_type": { "action": "copy" },
+    "wps_query": { "action": "copy" },
+    "wps_uri": {
+        "action": "copy",
+        "special_rules": {
+            "uri": "alter_site_url"
+        }
+    },
+    "wps_user_agent": { "action": "copy" },
+    "yoast_indexable": {
+      "action": "merge",
+      "special_rules": {
+        "open_graph_image": "alter_site_url",
+        "open_graph_image_meta": "alter_site_url",
+        "permalink": "alter_site_url",
+        "twitter_image": "alter_site_url"
+      }
+    },
+    "yoast_indexable_hierarchy": {
+      "action": "merge",
+      "synthetic_primary_key": ["indexable_id"]
+    },
+    "yoast_migrations": { "action": "merge" },
+    "yoast_primary_term": { "action": "merge" },
+    "yoast_seo_links": {
+      "action": "merge",
+      "special_rules": { "url": "alter_site_url" }
+    }
+  },
+  "integer_types": [
+    "INTEGER",
+    "INT",
+    "SMALLINT",
+    "TINYINT",
+    "MEDIUMINT",
+    "BIGINT"
+  ],
+  "numeric_types": [
+    "DECIMAL",
+    "NUMERIC",
+    "FLOAT",
+    "DOUBLE",
+    "REAL",
+    "DEC",
+    "FIXED"
+  ]
+}

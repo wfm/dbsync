@@ -3,6 +3,7 @@ import os
 from pstats import SortKey
 import time
 import cProfile
+from typing import Tuple
 
 import sqlparse
 
@@ -17,7 +18,7 @@ from dbsync.parsing.splitter import Splitter
 #   maryjoya_WP5Z2  NhU_
 #   maryjoya_WPAJC
 #   maryjoya_WPKWA  EMk_
-def get_args():
+def build_argparser() -> Tuple[Settings, argparse.ArgumentParser]:
     settings = Settings()
 
     argparser = argparse.ArgumentParser(
@@ -36,11 +37,22 @@ def get_args():
         "-t", "--table_prefix",
         help="The Wordpress table prefix",
         default=settings.tbl_prefix)
+    # TODO shouldn't need this:
     argparser.add_argument(
         "-r", "--reverse",
         help="Reverse the usual order (src=>stage, dst=>Prod)",
         default=False,
         action="store_true"
+    )
+    argparser.add_argument(
+        "-c", "--config",
+        help="Path to a configuration file in JSON format",
+        default=""
+    )
+    argparser.add_argument(
+        "-w", "--write_config",
+        help="Writes a configuration file in JSON format to the specified file",
+        default=""
     )
     argparser.add_argument(
         "--timestamp",
@@ -61,7 +73,8 @@ def get_args():
         "-v", "--verify",
         help="Skips tables that would otherwise be copied",
         default=False,
-        action="store_true")
+        action="store_true"
+    )
     argparser.add_argument(
         "-hw", "--highwater",
         help="Also writes high water mark file",
@@ -98,26 +111,37 @@ def get_args():
         action="store_true"
     )
 
-    args = argparser.parse_args()
+    return settings, argparser
 
-    if len(args.timestamp) > 0:
-        pairs = [x.split("=") for x in args.timestamp.replace(" ", "").split(";")]
-        for p in pairs:
-            p[1] = p[1].split(",")
-        d = dict(pairs)
-        print("Timestamp cols:", d)
-        settings.timestamp_cols.update(d)
+
+def get_args():
+    settings, argparser = build_argparser()
+
+    args = argparser.parse_args()
+    if len(args.config) > 0:
+        settings = Settings.obj(from_filename=args.config)
+    else:
+        # stuff that shouldn't change when you load a config file
+        settings.db_name = args.database
+        settings.tbl_prefix = args.table_prefix
+        settings.default_sync_action = SyncActions[args.default_action]
+        if args.reverse:
+            settings.src_prefix, settings.dst_prefix = settings.dst_prefix, settings.src_prefix
+            settings.src_uri_path, settings.dst_uri_path = \
+                settings.dst_uri_path, settings.src_uri_path
+
+        if len(args.timestamp) > 0:
+            pairs = [x.split("=") for x in args.timestamp.replace(" ", "").split(";")]
+            for p in pairs:
+                p[1] = p[1].split(",")
+            d = dict(pairs)
+            print("Timestamp cols:", d)
+            settings.timestamp_cols.update(d)
 
     only_tables = len(args.only) > 0
     if only_tables:
         tables = [settings.get_base_table_name(t) for t in args.only.replace(" ", "").split(",")]
         settings.included_tables += tables
-
-    settings.db_name = args.database
-    settings.tbl_prefix = args.table_prefix
-    settings.default_sync_action = SyncActions[args.default_action]
-    if args.reverse:
-        settings.src_prefix, settings.dst_prefix = settings.dst_prefix, settings.src_prefix
 
     output_base = os.path.basename(args.output)
     output_dir = os.path.dirname(args.output)
@@ -128,7 +152,13 @@ def get_args():
     settings.verify_mode = args.verify
     settings.verbose_mode = not args.quiet
     settings.debug_mode = args.debug and settings.verbose_mode
-    Settings.obj(settings)
+
+    if len(args.config) == 0:
+        Settings.obj(initial_settings=settings)
+
+    if len(args.write_config) > 0:
+        settings.dump(args.write_config)
+
     if not args.quiet:
         if args.verify:
             print("VERIFY MODE")

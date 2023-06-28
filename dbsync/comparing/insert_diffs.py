@@ -107,7 +107,7 @@ class InsertDiffs:
 
         return self._join_lines(sql)
 
-    def find_replacement_key(self, old_key_val: int, weak: bool=False) -> int:
+    def find_replacement_key(self, old_key_val: int, weak: bool = False) -> int:
         if not self.is_sorted:
             self.additions.sort(key=lambda x: x.old_autoinc_val)
             self.is_sorted = True

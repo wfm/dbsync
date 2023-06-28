@@ -84,6 +84,10 @@ class UnpackedInsert:
         if Settings.obj().verbose_mode:
             print(text)
 
+    def _debug_print(self, text: str) -> None:
+        if Settings.obj().debug_mode:
+            print(text)
+
     @classmethod
     def pack_values(cls, values: List[Dict[str, str]]) -> List[List[str]]:
         return [list(d.values()) for d in values]

@@ -57,6 +57,26 @@ class Key(Intermediate, NameMixin):
     def get_column_lengths(self) -> List[str]:
         return [col.length for col in self.columns]
 
+    def generate_sql(self) -> str:
+        sql = ""
+        if self.is_primary:
+            sql += "PRIMARY "
+        elif self.is_unique:
+            sql += "UNIQUE "
+        sql += "KEY"
+
+        if len(self.name) > 0:
+            sql += f" `{self.name}`"
+
+        sql += " ("
+        for col in self.columns:
+            sql += f"`{col.name}`"
+            if col.length is not None:
+                sql += f"({col.length})"
+            sql += "),"
+
+        return sql
+
 
 @dataclass
 class Column(NameMixin):
@@ -79,6 +99,8 @@ class Column(NameMixin):
             modstr = m.group(1)
         else:
             modstr = self.modifiers
+        if self.auto_inc:
+            modstr += " AUTO_INCREMENT"
         return modstr
 
     def _get_sql_str(self, terminator: str, modstr: str) -> str:
@@ -146,7 +168,7 @@ class Table(Intermediate, NameMixin):
         """Returns the primary key, if any"""
         keys = [key for key in self.keys if key.is_primary]
         return self._return_key(keys, "primary")
-    
+
     def has_primary_key(self) -> bool:
         return self.get_primary_key() is not None
 
@@ -216,9 +238,10 @@ Table {self.name} already has a (possibly synthetic) unique key.")
         sql.append(self._start_sql("CREATE", alt_name) + " (")
         for col in self.columns:
             sql.append(col.generate_sql())
+        for key in self.keys:
+            sql.append(key.generate_sql())
         # get rid of final comma
-        sql[-1:][0].rstrip(",")
-
+        sql[-1] = sql[-1].rstrip(",")
         sql.append(f") {self.post_definition_modifiers};")
         return "\n".join(sql)
 
