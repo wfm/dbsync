@@ -323,6 +323,7 @@ class Settings(BaseModel):
         "options": {
             "action": SyncActions.MERGE,
             "update_mode": UpdateModes.PESSIMISTIC,
+            "insert_pk": False,
             "special_rules": {
                 "option_name": alter_table_name,
                 "option_value": alter_site_url
@@ -671,6 +672,15 @@ class Settings(BaseModel):
         base_name = self.get_base_table_name(table_name)
         options = self.table_options.get(base_name, {})
         return options.get("use_time_based_comparison", False)
+
+    def get_should_insert_pk(self, table_name: str) -> bool:
+        """
+        Returns true if the script should contain the PK value
+        and false if it should let it auto-increment.
+        """
+        base_name = self.get_base_table_name(table_name)
+        options = self.table_options.get(base_name, {})
+        return options.get("insert_pk", True)
 
     def get_row_level_action(self, table_name: str, key: List[Any]) -> UpdateActions:
         base_name = self.get_base_table_name(table_name)

@@ -76,6 +76,8 @@ class CompareInsert:
 
         self.max_src_autoinc = -1
 
+        self.should_insert_pk = Settings.obj().get_should_insert_pk(self.src_table.name)
+
         if src is not None:
             table_name = self.src_table.name
             msg = f"  Comparison key is {'unique' if self.src.is_unique else 'primary'} key. \
@@ -170,7 +172,12 @@ Key column(s): {self.src.key_column_names}"
                     if self.debug_mode:
                         self._debug_insert(src_item, dst_item)
 
-                    self.add.append(src_item.insert_vals)
+                    if self.should_insert_pk:
+                        values = src_item.insert_vals
+                    else:
+                        values = {k: v for k, v in src_item.insert_vals.items() if k not in src_item.pk_vals}
+
+                    self.add.append(values)
                 
                 src_item = self.srcgen.get_next_item()
             elif src_item.key > dst_item.key:
@@ -238,6 +245,9 @@ Key column(s): {self.src.key_column_names}"
         return msg
 
     def _update_autoinc_vals(self) -> List[RowData]:
+        if not self.should_insert_pk:
+            return [RowData(r, -1, -1) for r in self.add]
+        
         if self.dst_table_has_autoinc_column:
             start = self.dst_table.get_starting_autoinc_val()
             curr = self.dst_table.get_autoinc_val()

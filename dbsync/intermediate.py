@@ -301,7 +301,8 @@ Table {self.name} already has a (possibly synthetic) unique key.")
                 sql.append("  MODIFY" + autoinc_col.generate_sql(";"))
             elif Settings.obj().dml_options == DmlOptions.GENERATE_LOCK_TABLES:
                 sql.append(f"LOCK TABLES `{alt_name}` WRITE;")
-                sql.append(f"/*!40000 ALTER TABLE `{alt_name}` DISABLE KEYS */;")
+                # not supported by our storage engine?
+                #sql.append(f"/*!40000 ALTER TABLE `{alt_name}` DISABLE KEYS */;")
                 sql.append(f"/*!ALTER TABLE `{alt_name}` AUTO_INCREMENT={autoinc_val} */;")
         return "\n".join(sql)
 
@@ -317,7 +318,7 @@ Table {self.name} already has a (possibly synthetic) unique key.")
                 sql.append(self._start_sql("ALTER", alt_name))
                 sql.append("  MODIFY" + autoinc_col.generate_autoinc_sql(";", autoinc_val))
             elif Settings.obj().dml_options == DmlOptions.GENERATE_LOCK_TABLES:
-                sql.append(f"/*!40000 ALTER TABLE `{alt_name}` ENABLE KEYS */;")
+                #sql.append(f"/*!40000 ALTER TABLE `{alt_name}` ENABLE KEYS */;")
                 sql.append("UNLOCK TABLES;")
         return "\n".join(sql)
 

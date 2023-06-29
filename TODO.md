@@ -26,6 +26,7 @@
 0. Stop the Local site (this stops the DB too)
 0. Combine SQL file in export from Local with export from Staging
 0. Run dbsync
+0. Migrate files from staging site
 0. Start Local, verify correctness
 0. Run maint/repair.php. Optimize?
 0. Export from local
