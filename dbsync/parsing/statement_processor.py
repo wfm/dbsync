@@ -66,6 +66,7 @@ def process_statements(
                 before_use = False
                 us.is_target = us.value == target_database
                 in_target = us.is_target
+                print(f"Got USE {us.value}, in target: {in_target}")
             elif t.match(T.DDL, "ALTER"):
                 add_parsed(lambda a=AlterStatement(), p=ss: a.parse(p))
             elif t.match(T.DML, "COMMIT") or \
@@ -86,6 +87,6 @@ def process_statements(
         except DbSyncException as err:
             print(f"{type(err)} - {err}")
             print(f"Index: {ss.token_ix}")
-            print(f"SQL: {text}")
+            print(f"SQL: {text[:80]}")
 
     return repo

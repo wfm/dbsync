@@ -194,10 +194,12 @@ def do_comparison(filename: str) -> None:
     time0 = time.time()
     with open(filename, "r", encoding="utf8") as f:
         text_l = sqlparse.split(f.read())
+    print(f"Processing {len(text_l)} SQL statements")
     time1 = time.time()
     repo = process_statements(text_l, Settings.obj().db_name)
     time2 = time.time()
     repo.post_process()
+    print(f"Tables: {repo.get_table_names()}")
     time3 = time.time()
     c = Comparison(repo, Settings.obj().output_file, Settings.obj().file_descriptor)
     c.compare()

@@ -334,7 +334,8 @@ class Settings(BaseModel):
         },
         "posts": {
             "action": SyncActions.MERGE,
-            "use_time_based_comparison": True,
+            "synthetic_primary_key": ["ID"],
+            "use_time_based_comparison": False,
             "special_rules": {
                 "guid": alter_site_url,
                 "post_content": alter_site_url
@@ -351,7 +352,7 @@ class Settings(BaseModel):
         "terms": {
             "action": SyncActions.MERGE,
             "row_level_actions": [
-                ([49], UpdateActions.INSERT_SRC)    # TODO tuple not preserved through json round-trip
+                [[49], UpdateActions.INSERT_SRC]
             ]
         },
         "term_relationships": {"action": SyncActions.MERGE},
@@ -476,6 +477,10 @@ class Settings(BaseModel):
     verify_mode: bool = False
 
     dml_options: DmlOptions = DmlOptions.GENERATE_LOCK_TABLES
+
+    # Date the staging site was created. Don't have the actual time
+    # Put single quotes around it because the things were are comparing it with have quotes.
+    fork_date: str = "'2023-04-07 00:00:00'"
 
     _table_name_regex: re = PrivateAttr()
     _integer_types_regex: re = PrivateAttr()
@@ -672,10 +677,10 @@ class Settings(BaseModel):
         options = self.table_options.get(base_name, {})
         actions = options.get("row_level_actions")
         if actions is not None:
-            # TODO: inefficient, but we only have 1 action at the moment
-            for k, a in actions.items():
-                if k == key:
-                    return a
+            # TODO: inefficient, but we only have 65 actions at the moment
+            for action in actions:
+                if action[0] == key:
+                    return action[1]
 
         return UpdateActions.DEFAULT
 

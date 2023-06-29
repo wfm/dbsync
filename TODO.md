@@ -1,5 +1,7 @@
-# Procedure:
+# Procedure to sync stage to prod:
 0. Put sites in maintenance mode (is there a message?)
+* Can you stop all the cron jobs? 
+- define('DISABLE_WP_CRON', true);
 1. Do zip and mysqldump backups and download
 2. Do WP Migrate backups of prod and stage
 3. Copy media and CSS files from prod to stage using WP Migrate backups
@@ -16,9 +18,29 @@
 10. Check the prod site
 11. Turn off maintenance mode
 
+# Procedure to sync staging to prod via Local
+0. Export prod and stage from Bluehost using WP-Migrate
+0. Import prod into Local (this will change urls from https://maryjoyart.com to https://mary-joy-murphy-prod.local)
+0. Disable WP-Cron in Local?
+0. Export DB from Local
+0. Stop the Local site (this stops the DB too)
+0. Combine SQL file in export from Local with export from Staging
+0. Run dbsync
+0. Start Local, verify correctness
+0. Run maint/repair.php. Optimize?
+0. Export from local
+0. Import into prod
+
+Is there a way to test this with stage?
+
 # TODO
 ## Urgent
-
+* If syncing with local, change 'https://mary-joy-murphy-prod.local/' to real site URL
+* Or maybe not - we need to have it run on local
+* Can we stop cron jobs while we sync? define('DISABLE_WP_CRON', true);
+* For _options (at least), let DB set the autoinc column
+* add FKs for tables we added, _wps_
+* Getting warnings that disabling keys is not supported
 
 ## Medium-term
 * decent test coverage
@@ -101,18 +123,14 @@
 * Check autoincrement
 * Use LOCK TABLES `tbl_test0` WRITE; and UNLOCK TABLES?
 * Get it to work with dump from MySQL workbench
-
-===========
-2023-06-18
 * filter out data from before 4/7/23 - those records must have been deleted from dst
-* add FKs for tables we added, _wps_
 Trying to merge from stage to prod. There is less data to migrate:
-* _posts - records need to be hand-selected
-* _terms - a couple of updates should really be inserts
-* _term_taxonomy - don't bother updating counts?
 * _options - update any rows?
 * _postmeta - many inserts are for test orders which we don't need. Will be reduced if we reduce post inserts
+* _posts - records need to be hand-selected
+* _term_taxonomy - don't bother updating counts?
 * _termmeta - would update 3 records, if it were optimistic. Inserts should be ok
+* _terms - a couple of updates should really be inserts
 * _usermeta - tempted to skip 
 * _wc_admin_note_actions - skip?
 * _wc_category_lookup - ok, i think
@@ -126,6 +144,9 @@ Trying to merge from stage to prod. There is less data to migrate:
 * _yoast_indexable_hierarchy - skip
 * _yoast_primary_term - skip
 * _yoast_seo_links - skip
+
+===========
+2023-06-18
 
 Tables not on the list could be skipped.
 
@@ -235,3 +256,14 @@ Done:
         else:
             item = Settings.try_convert_to_enum(item)
         return item
+
+
+0 row(s) affected, 1 warning(s): 1031 Table storage engine for 'NhU_options' doesn't have this option
+19:37:14	/*!40000 ALTER TABLE `NhU_options` DISABLE KEYS */	0 row(s) affected, 1 warning(s): 1031 Table storage engine for 'NhU_options' doesn't have this option	0.0010 sec
+
+
+0 row(s) affected, 1 warning(s): 1031 Table storage engine for 'NhU_options' doesn't have this option
+
+19:37:14	INSERT INTO `NhU_options` (`option_id`, `option_name`, `option_value`, `autoload`) VALUES (96967, 'bh_cdata_retry_count', '8', 'yes'), (96968, 'jetpack_safe_mode_confirmed', '1', 'yes'), (96969, 'jetpack_sync_dedicated_spawn_lock', '1681493577.6842', 'no'), (96970, 'jetpack_sync_error_idc', 'a:7:{s:4:\"home\";s:28:\"maryjoyart.com/staging/1617/\";s:7:\"siteurl\";s:28:\"maryjoyart.com/staging/1617/\";s:10:\"error_code\";s:20:\"jetpack_url_mismatch\";s:15:\"request_siteurl\";s:28:\"maryjoyart.com/staging/1617/\";s:12:\"request_home\";s:28:\"maryjoyart.com/staging/1617/\";s:13:\"wpcom_siteurl\";s:15:\"maryjoyart.com/\";s:10:\"wpcom_home\";s:15:\"maryjoyart.com/\";}', 'yes'), (96971, 'jpsq_sync-1681493551.313020-916049-1', 'a:6:{i:0;s:14:\"updated_option\";i:1;a:3:{i:0;s:15:\"jetpack_options\";i:1;a:14:{s:7:\"version\";s:15:\"12.0:1680673713\";s:11:\"old_version\";s:17:\"11.9.1:1679235985\";s:14:\"last_heartbeat\";i:1681407311;s:2:\"id\";i:215576346;s:6:\"public\";i:1;s:30:\"recommendations_banner_enabled\";b:1;s:27:\"recommendations_conditional\";a:4:{i:0;s:11:\"backup-plan\";i:1;s:5:\"boost\";i:2;s:7:\"protect\";i:3;s:10:\"videopress\";}s:16:\"first_admin_view\";b:1;s:28:\"has_seen_wc_connection_modal\";b:1;s:20:\"recommendations_data\";a:7:{s:16:\"onboardingViewed\";a:0:{}s:23:\"selectedRecommendations\";a:1:{i:0;s:5:\"boost\";}s:22:\"skippedRecommendations\";a:0:{}s:21:\"viewedRecommendations\";a:6:{i:0;s:11:\"backup-plan\";i:1;s:5:\"boost\";i:2;s:7:\"summary\";i:3;s:7:\"protect\";i:4;s:10:\"videopress\";i:5;s:7:\"monitor\";}s:18:\"site-type-personal\";b:0;s:16:\"site-type-agency\";b:0;s:15:\"site-type-store\";b:1;}s:20:\"recommendations_step\";s:16:\"banner-completed\";s:9:\"hide_jitm\";a:5:{s:10:\"videopress\";a:2:{s:14:\"last_dismissal\";i:1678302742;s:6:\"number\";i:1;}s:4:\"scan\";a:2:{s:14:\"last_dismissal\";i:1679068030;s:6:\"number\";i:1;}s:18:\"protect_standalone\";a:2:{s:14:\"last_dismissal\";i:1679169821;s:6:\"number\";i:1;}s:25:\"wooservices-existing-user\";a:2:{s:14:\"last_dismissal\";i:1679689629;s:6:\"number\";i:1;}s:3:\"cdn\";a:2:{s:14:\"last_dismissal\";i:1680026676;s:6:\"number\";i:1;}}s:28:\"fallback_no_verify_ssl_certs\";i:0;s:9:\"time_diff\";i:0;}i:2;a:14:{s:7:\"version\";s:15:\"12.0:1680673713\";s:11:\"old_version\";s:17:\"11.9.1:1679235985\";s:14:\"last_heartbeat\";i:1681493551;s:2:\"id\";i:215576346;s:6:\"public\";i:1;s:30:\"recommendations_banner_enabled\";b:1;s:27:\"recommendations_conditional\";a:4:{i:0;s:11:\"backup-plan\";i:1;s:5:\"boost\";i:2;s:7:\"protect\";i:3;s:10:\"videopress\";}s:16:\"first_admin_view\";b:1;s:28:\"has_seen_wc_connection_modal\";b:1;s:20:\"recommendations_data\";a:7:{s:16:\"onboardingViewed\";a:0:{}s:23:\"selectedRecommendations\";a:1:{i:0;s:5:\"boost\";}s:22:\"skippedRecommendations\";a:0:{}s:21:\"viewedRecommendations\";a:6:{i:0;s:11:\"backup-plan\";i:1;s:5:\"boost\";i:2;s:7:\"summary\";i:3;s:7:\"protect\";i:4;s:10:\"videopress\";i:5;s:7:\"monitor\";}s:18:\"site-type-personal\";b:0;s:16:\"site-type-agency\";b:0;s:15:\"site-type-store\";b:1;}s:20:\"recommendations_step\";s:16:\"banner-completed\";s:9:\"hide_jitm\";a:5:{s:10:\"videopress\";a:2:{s:14:\"last_dismissal\";i:1678302742;s:6:\"number\";i:1;}s:4:\"scan\";a:2:{s:14:\"last_dismissal\";i:1679068030;s:6:\"number\";i:1;}s:18:\"protect_standalone\";a:2:{s:14:\"last_dismissal\";i:1679169821;s:6:\"number\";i:1;}s:25:\"wooservices-existing-user\";a:2:{s:14:\"last_dismissal\";i:1679689629;s:6:\"number\";i:1;}s:3:\"cdn\";a:2:{s:14:\"last_dismissal\";i:1680026676;s:6:\"number\";i:1;}}s:28:\"fallback_no_verify_ssl_certs\";i:0;s:9:\"time_diff\";i:0;}}i:2;i:0;i:3;d:1681493551.3116691112518310546875;i:4;b:0;i:5;a:14:{s:13:\"wpcom_user_id\";N;s:16:\"external_user_id\";i:0;s:12:\"display_name\";N;s:10:\"user_email\";N;s:10:\"user_roles\";a:0:{}s:15:\"translated_role\";N;s:7:\"is_cron\";b:1;s:7:\"is_rest\";b:0;s:9:\"is_xmlrpc\";b:0;s:10:\"is_wp_rest\";b:0;s:7:\"is_ajax\";b:0;s:11:\"is_wp_admin\";b:0;s:6:\"is_cli\";b:0;s:8:\"from_url\";s:95:\"https://maryjoyart.com/wp-cron.php?doing_wp_cron=1681493549.4250431060791015625000\";}}', ...	
+
+Error Code: 1062. Duplicate entry '96967' for key 'PRIMARY'	0.00055 sec

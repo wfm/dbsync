@@ -3,9 +3,9 @@
   "src_prefix": "staging_",
   "dst_prefix": "",
   "tbl_prefix": "NhU_",
-  "base_uri": "https://maryjoyart.com",
-  "src_uri_path": "/staging/1617",
-  "dst_uri_path": "",
+  "base_uri": "",
+  "src_uri_path": "https://maryjoyart.com/staging/1617",
+  "dst_uri_path": "https://mary-joy-murphy-prod.local",
   "included_tables": [],
   "excluded_tables": [],
   "timestamp_cols": {
@@ -584,7 +584,7 @@
       "key_column": ""
     }
   ],
-  "default_sync_action": "default",
+  "default_sync_action": "skip",
   "default_update_mode": "optimistic",
   "omit_pessimistic_sql": true,
   "update_tables_without_timestamp": true,
@@ -685,18 +685,101 @@
     },
     "posts": {
       "action": "merge",
-      "use_time_based_comparison": true,
+      "synthetic_primary_key": ["ID"],
+      "use_time_based_comparison": false,
       "special_rules": {
         "guid": "alter_site_url",
         "post_content": "alter_site_url"
-      }
+      },
+      "row_level_actions": [
+        [[565], "skip"],
+        [[566], "skip"],
+        [[631], "skip"],
+        [[974], "skip"],
+        [[983], "skip"],
+        [[986], "skip"],
+        [[993], "skip"],
+        [[1001], "skip"],
+        [[1178], "skip"],
+        [[1327], "skip"],
+        [[1329], "skip"],
+        [[1372], "skip"],
+        [[1376], "skip"],
+        [[1414], "skip"],
+        [[1710], "insert_src"],
+        [[1711], "insert_src"],
+        [[1712], "insert_src"],
+        [[1713], "insert_src"],
+        [[1714], "insert_src"],
+        [[1724], "insert_src"],
+        [[1727], "insert_src"],
+        [[1728], "insert_src"],
+        [[1729], "insert_src"],
+        [[1730], "insert_src"],
+        [[1731], "insert_src"],
+        [[1732], "insert_src"],
+        [[1733], "insert_src"],
+        [[1734], "insert_src"],
+        [[1747], "insert_src"],
+        [[1750], "insert_src"],
+        [[1752], "insert_src"],
+        [[1754], "insert_src"],
+        [[1755], "insert_src"],
+        [[1757], "insert_src"],
+        [[1759], "insert_src"],
+        [[1760], "insert_src"],
+        [[1761], "insert_src"],
+        [[1763], "insert_src"],
+        [[1764], "insert_src"],
+        [[1765], "insert_src"],
+        [[1769], "insert_src"],
+        [[1771], "insert_src"],
+        [[1772], "insert_src"],
+        [[1774], "insert_src"],
+        [[1776], "insert_src"],
+        [[1778], "insert_src"],
+        [[1780], "insert_src"],
+        [[1783], "insert_src"],
+        [[1785], "insert_src"],
+        [[1787], "insert_src"],
+        [[1789], "insert_src"],
+        [[1791], "insert_src"],
+        [[1793], "insert_src"],
+        [[1795], "insert_src"],
+        [[1797], "insert_src"],
+        [[1799], "insert_src"],
+        [[1801], "insert_src"],
+        [[1803], "insert_src"],
+        [[1805], "insert_src"],
+        [[1807], "insert_src"],
+        [[1809], "insert_src"],
+        [[1813], "insert_src"],
+        [[1815], "insert_src"],
+        [[1816], "insert_src"],
+        [[1817], "insert_src"],
+        [[1818], "insert_src"],
+        [[1819], "insert_src"],
+        [[1820], "insert_src"],
+        [[1821], "insert_src"],
+        [[1822], "insert_src"],
+        [[1823], "insert_src"],
+        [[1824], "insert_src"],
+        [[1826], "insert_src"],
+        [[1827], "insert_src"]
+      ]
     },
     "sib_model_forms": { "action": "merge" },
     "sib_model_users": { "action": "merge" },
     "tec_events": { "action": "merge" },
     "tec_occurrences": { "action": "merge" },
     "termmeta": { "action": "merge", "update_mode": "pessimistic" },
-    "terms": { "action": "merge" },
+    "terms": {
+        "action": "merge",
+        "row_level_actions": [
+            [[49], "insert_src"],
+            [[50], "insert_src"]
+        ]
+    },
     "term_relationships": { "action": "merge" },
     "term_taxonomy": {
         "action": "merge",
@@ -705,7 +788,7 @@
         }
     },
     "usermeta": {
-      "action": "merge",
+      "action": "skip",
       "synthetic_unique_key": ["user_id", "meta_key"],
       "special_rules": {
         "meta_key": "alter_table_name",
@@ -715,7 +798,7 @@
     "users": { "action": "skip" },
     "wc_admin_notes": { "action": "skip", "synthetic_unique_key": ["name"] },
     "wc_admin_note_actions": {
-      "action": "merge",
+      "action": "skip",
       "synthetic_unique_key": ["name"],
       "special_rules": { "query": "alter_site_url" }
     },
@@ -723,15 +806,15 @@
     "wc_customer_lookup": { "action": "merge" },
     "wc_download_log": { "action": "merge" },
     "wc_order_coupon_lookup": { "action": "merge" },
-    "wc_order_product_lookup": { "action": "merge" },
-    "wc_order_stats": { "action": "merge" },
-    "wc_order_tax_lookup": { "action": "merge" },
+    "wc_order_product_lookup": { "action": "skip" },
+    "wc_order_stats": { "action": "skip" },
+    "wc_order_tax_lookup": { "action": "skip" },
     "wc_product_attributes_lookup": { "action": "merge" },
     "wc_product_download_directories": {
       "action": "merge",
       "special_rules": { "url": "alter_site_url" }
     },
-    "wc_product_meta_lookup": { "action": "merge" },
+    "wc_product_meta_lookup": { "action": "skip" },
     "wc_rate_limits": { "action": "merge" },
     "wc_reserved_stock": { "action": "merge" },
     "wc_tax_rate_classes": { "action": "merge" },
@@ -740,7 +823,7 @@
     "woocommerce_attribute_taxonomies": { "action": "merge" },
     "woocommerce_downloadable_product_permissions": { "action": "merge" },
     "woocommerce_log": { "action": "merge" },
-    "woocommerce_order_itemmeta": { "action": "merge" },
+    "woocommerce_order_itemmeta": { "action": "skip" },
     "woocommerce_order_items": { "action": "skip" },
     "woocommerce_payment_tokenmeta": { "action": "merge" },
     "woocommerce_payment_tokens": { "action": "merge" },
@@ -756,21 +839,21 @@
     "wpforms_tasks_meta": { "action": "merge" },
     "wpmailsmtp_debug_events": { "action": "merge" },
     "wpmailsmtp_tasks_meta": { "action": "merge" },
-    "wps_hit": { "action": "copy" },
-    "wps_index": { "action": "copy" },
-    "wps_key": { "action": "copy" },
-    "wps_object_term": { "action": "copy" },
-    "wps_object_type": { "action": "copy" },
-    "wps_query": { "action": "copy" },
+    "wps_hit": { "action": "skip" },
+    "wps_index": { "action": "skip" },
+    "wps_key": { "action": "skip" },
+    "wps_object_term": { "action": "skip" },
+    "wps_object_type": { "action": "skip" },
+    "wps_query": { "action": "skip" },
     "wps_uri": {
-        "action": "copy",
+        "action": "skip",
         "special_rules": {
             "uri": "alter_site_url"
         }
     },
-    "wps_user_agent": { "action": "copy" },
+    "wps_user_agent": { "action": "skip" },
     "yoast_indexable": {
-      "action": "merge",
+      "action": "skip",
       "special_rules": {
         "open_graph_image": "alter_site_url",
         "open_graph_image_meta": "alter_site_url",
@@ -779,13 +862,13 @@
       }
     },
     "yoast_indexable_hierarchy": {
-      "action": "merge",
+      "action": "skip",
       "synthetic_primary_key": ["indexable_id"]
     },
-    "yoast_migrations": { "action": "merge" },
-    "yoast_primary_term": { "action": "merge" },
+    "yoast_migrations": { "action": "skip" },
+    "yoast_primary_term": { "action": "skip" },
     "yoast_seo_links": {
-      "action": "merge",
+      "action": "skip",
       "special_rules": { "url": "alter_site_url" }
     }
   },
@@ -805,5 +888,6 @@
     "REAL",
     "DEC",
     "FIXED"
-  ]
+  ],
+  "fork_date": "'2023-04-07 00:00:00'"
 }

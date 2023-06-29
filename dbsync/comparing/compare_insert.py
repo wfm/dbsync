@@ -76,9 +76,22 @@ class CompareInsert:
 
         self.max_src_autoinc = -1
 
-        self.check_fk_timestamps = not self.src_table.has_timestamp() and self._has_fk_timestamps()
-        if self.check_fk_timestamps:
-            self._verbose_print("  Table has FK timestamps")
+        if src is not None:
+            table_name = self.src_table.name
+            msg = f"  Comparison key is {'unique' if self.src.is_unique else 'primary'} key. \
+Key column(s): {self.src.key_column_names}"
+            self._verbose_print(msg)
+            
+            has_timestamp = Settings.obj().table_has_timestamp(table_name)
+            self.check_fk_timestamps = not has_timestamp and self._has_fk_timestamps()
+            if self.check_fk_timestamps:
+                msg = "  Using FK timestamps"
+            elif has_timestamp:
+                msg = "  Table has timestamps"
+            else:
+                update_mode = Settings.obj().get_update_mode(table_name)
+                msg = f"  Using PK to guess at updates – {UpdateModes(update_mode).name} mode"
+            self._verbose_print(msg)
 
         self.srcgen = CompareInsert.Generator(self.src)
         self.dstgen = CompareInsert.Generator(self.dst)
@@ -137,8 +150,23 @@ class CompareInsert:
             if self.dstgen is None or not self.dstgen.is_open or src_item.key < dst_item.key:
                 # if dst is closed, copy remaining records from src into dst
                 # if src key < dst key, insert this record into dst
+                do_insert = True
+
+                row_action = Settings.obj().get_row_level_action(self.src_table.name, src_item.key)
+                if row_action == UpdateActions.SKIP:
+                    self.debug_print(f"  Skipping {src_item.key} based on row-level action")
+                    self.add.append(src_item.insert_vals)
+                    do_insert = False
+
                 col_update_action = self._apply_col_level_actions(src_item)
-                if col_update_action != UpdateActions.SKIP:
+                if col_update_action == UpdateActions.SKIP:
+                    self.debug_print(f"  Skipping {src_item.key} based on column-level action")
+                    do_insert = False
+                
+                if not self._was_added_after_fork(src_item):
+                    do_insert = False
+
+                if do_insert:
                     if self.debug_mode:
                         self._debug_insert(src_item, dst_item)
 
@@ -215,29 +243,34 @@ class CompareInsert:
             curr = self.dst_table.get_autoinc_val()
             highest = self.dst_autoinc[-1] if len(self.dst_autoinc) > 0 else -1
             self.debug_print(f"  autoinc after - starting: {start}, current: {curr}, highest: {highest}")
-            self.debug_print(f"  src highest autoinc val {self.max_src_autoinc}")
+            # why do we care about src here?
+            #self.debug_print(f"  src highest autoinc val {self.max_src_autoinc}")
+            # TODO maybe we have an off-by-one issue?
+            self.dst_table.update_autoinc_val(curr + 1)
 
         result: List[RowData] = []
-        if self.dst_table_has_autoinc_column and \
-                self.dst_table.get_autoinc_val() <= self.max_src_autoinc:
-            # TODO kludge! Why add 10? It should be 1. Explanation:
-            # I found that an auto-draft post was created between
-            # the time I dumped the DB and the time I ran the update script.
-            # I hope that burning a few auto-inc values is a harmless workaround to this.
-            self.dst_table.update_autoinc_val(self.max_src_autoinc + 10)
-            self.debug_print(f"  New autoinc value is: {self.dst_table.get_autoinc_val()}")
+        # if self.dst_table_has_autoinc_column and \
+        #         self.dst_table.get_autoinc_val() <= self.max_src_autoinc:
+        #     # TODO kludge! Why add 10? It should be 1. Explanation:
+        #     # I found that an auto-draft post was created between
+        #     # the time I dumped the DB and the time I ran the update script.
+        #     # I hope that burning a few auto-inc values is a harmless workaround to this.
+        #     # 2023-6-28 going back to 1
+        #     self.dst_table.update_autoinc_val(self.max_src_autoinc + 1)
+        #     self.debug_print(f"  New autoinc value is: {self.dst_table.get_autoinc_val()}")
 
+        # TODO parameterize reusing PKs. Not reusing now
         for insert_vals in self.add:
             ai_col_name, old_ai_val = self._get_old_autoinc_val(insert_vals)
             if self.are_copying:
                 rd = RowData(insert_vals, old_ai_val, old_ai_val)
             elif not self.dst_table_has_autoinc_column:
-                # i think this elif is superfluous
+                # i think this elif is superfluous (but there is evidence otherwise)
                 rd = RowData(insert_vals, -1, -1)
-            elif not self._dst_has_autoinc_val(old_ai_val):
-                rd = RowData(insert_vals, old_ai_val, old_ai_val)
-                msg = f"  Reusing PK: {old_ai_val}"
-                self.debug_print(msg)
+            # elif not self._dst_has_autoinc_val(old_ai_val):
+            #     rd = RowData(insert_vals, old_ai_val, old_ai_val)
+            #     msg = f"  Reusing PK: {old_ai_val}"
+            #     self.debug_print(msg)
             else:
                 rd = self._assign_new_autoinc_val(insert_vals, ai_col_name, old_ai_val)
 
@@ -284,14 +317,17 @@ old: {old_ai_val}, new: {new_ai_val}"
                              dst_item: InsertRecord) -> Tuple[bool, InsertRecord | None, Dict[str, str] | None]:
         row_action = Settings.obj().get_row_level_action(self.src_table.name, src_item.key)
         match row_action:
+            # Updates that should really be inserts
             case UpdateActions.INSERT_SRC:
                 self.debug_print(f"  Inserting {src_item.key} based on row-level action")
                 self.add.append(src_item.insert_vals)
                 do_update = False
-            case UpdateActions.DEFAULT:
-                do_update, _, msg, confidence = self._should_update(src_item, dst_item)
+            case UpdateActions.SKIP:
+                do_update = False
+                msg = "  Skipping update based on row-level action"
+                confidence = 1
             case _:
-                raise DbSyncCompareException(f"Row action {UpdateActions(row_action).name} is not implemented")
+                do_update, _, msg, confidence = self._should_update(src_item, dst_item)
 
         col_update_action = self._apply_col_level_actions(src_item)
         if col_update_action == UpdateActions.SKIP:
@@ -327,6 +363,20 @@ old: {old_ai_val}, new: {new_ai_val}"
                 if re.search(pattern, src_item.insert_vals[col_name]):
                     col_update_action = new_update_action
         return col_update_action
+
+    def _was_added_after_fork(self, src_item: InsertRecord) -> bool:
+        assert src_item is not None
+
+        src_times = None
+        if self.src_table.has_timestamp():
+            src_times = self._get_column_values(src_item.insert_vals, self.src_table.timestamp_columns)
+        elif self.check_fk_timestamps:
+            src_times = self._get_fk_timestamps(src_item, self.src_table)
+
+        if src_times is not None:
+            timestamp = next(filter(CompareInsert._time_regex.match, src_times))
+            return timestamp > Settings.obj().fork_date
+        return True     # assume record should be inserted
 
     def _should_update(self,
                        src_item: InsertRecord,
@@ -439,9 +489,10 @@ old: {old_ai_val}, new: {new_ai_val}"
             src = next(filter(CompareInsert._time_regex.match, src_times))
             dst = next(filter(CompareInsert._time_regex.match, dst_times))
 
-            do_update = src >= dst  # TODO is it ok to compare strings here?
-            # TODO temp
-            #self.debug_print(f"    {src} >= {dst} => {do_update}")
+            if src <= Settings.obj().fork_date:
+                self.debug_print(f"  Skipping update, record is too old ({src})")
+
+            do_update = src >= dst and src > Settings.obj().fork_date
         except StopIteration:
             msg = "*** Time comparison raised StopIteration ***"
             print(msg)

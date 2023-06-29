@@ -98,10 +98,6 @@ class Comparison:
 
         if action == SyncActions.MERGE:
             self._print_remark(f"\nMERGE table {table.name}")
-            update_mode = Settings.obj().get_update_mode(table.name)
-            self._print_remark(f"  Update mode is {UpdateModes(update_mode).name}")
-            text = "has" if Settings.obj().table_has_timestamp(table.name) else "does not have"
-            self._print_remark(f"  Table {text} a timestamp column")
             self._merge_table(table, dst)
             return
 
@@ -139,11 +135,9 @@ class Comparison:
             ci.close()
             sql_text = diffs.generate_sql()
             if len(sql_text) > 0:
-                self._write_sql(f"\n-- Prod table {src.name}")
-                if dst is not None:
-                    self._write_sql(f"-- Staging table {dst.name}", blank_line=False)
-                else:
-                    self._write_sql("-- No staging table found", blank_line=False)
+                self._write_sql(f"\n-- Source table {src.name}")
+                assert dst is not None
+                self._write_sql(f"-- Destination table {dst.name}", blank_line=False)
 
                 if src.has_autoinc_column():
                     new_autoinc = max(src.get_autoinc_val(), dst.get_autoinc_val())
@@ -231,6 +225,7 @@ class Comparison:
             self._write_sql(text)
 
     def compare(self):
+        self._print_remark(f"Fork date: {Settings.obj().fork_date}")
         # The only thing we output besides insert and update are a few set statements
         # that occur before the first table definition.
         for statement in self.repo:

@@ -46,7 +46,10 @@ Limiting the _posts table to posts and pages would be an improvement. Events, pr
 # Alternative to WP
 
 Some alternatives:
-* Shopify. I haven't looked into this. The cost was a turnoff at the beginning.
+* Shopify. The cost was a turnoff at the beginning, $480/year to start.
+* Shopify alternatives, like BigCommerce, Ecwid
+* https://www.forbes.com/advisor/business/software/best-shopify-alternatives/
+* Squarespace, Wix
 * Etsy or similar for the craft stuff. They have high fees.
 * There are art-specific sites for the abstract paintings.
 * DIY system. This is appealing in that it would be interesting to build.
