@@ -173,11 +173,20 @@ class Comparison:
             else:
                 self._patch_strong_fk(diffs, ci, fk, fk_id)
 
+    # TODO should the fk patching be a separate class?
     def _patch_strong_fk(self,
                          diffs: InsertDiffs,
                          ci: CompareInsert,
                          fk: ForeignKey,
                          fk_id: InsertDiffs) -> None:
+        self._patch_strong_fk_in_additions(diffs, ci, fk, fk_id)
+        self._patch_strong_fk_in_updates(diffs, ci, fk, fk_id)
+
+    def _patch_strong_fk_in_additions(self,
+                                      diffs: InsertDiffs,
+                                      ci: CompareInsert,
+                                      fk: ForeignKey,
+                                      fk_id: InsertDiffs) -> None:
         for add in diffs.additions:
             old_key_val = add.insert_vals[fk.src_column]
             # TODO i thought we were replacing NULL with None
@@ -187,8 +196,26 @@ class Comparison:
                 new_key_val = fk_id.find_replacement_key(int(old_key_val))
                 if new_key_val != int(old_key_val):
                     ci.debug_print(
-                        f"    old: {old_key_val}, new: {new_key_val}")
+                        f"    add old: {old_key_val}, new: {new_key_val}")
                     add.insert_vals[fk.src_column] = str(new_key_val)
+
+    def _patch_strong_fk_in_updates(self,
+                                    diffs: InsertDiffs,
+                                    ci: CompareInsert,
+                                    fk: ForeignKey,
+                                    fk_id: InsertDiffs) -> None:
+        for upd in diffs.updates:
+            if fk.src_column in upd.update_vals:
+                old_key_val = upd.update_vals[fk.src_column]
+                # TODO this code could maybe be refactored into a method
+                if old_key_val is not None and \
+                        old_key_val.casefold() != "null" \
+                        and int(old_key_val) > 0:
+                    new_key_val = fk_id.find_replacement_key(int(old_key_val))
+                    if new_key_val != int(old_key_val):
+                        ci.debug_print(
+                            f"    upd old: {old_key_val}, new: {new_key_val}")
+                        upd.update_vals[fk.src_column] = str(new_key_val)
 
     def _patch_weak_fk(self,
                        diffs: InsertDiffs,
@@ -197,27 +224,55 @@ class Comparison:
                        fk_id: InsertDiffs) -> None:
         key_regex = Settings.obj().weak_reference_regex
         value_regex = re.compile(r"^(['\"])(\d+)\1$")
+
+        self._patch_weak_fk_in_additions(diffs, ci, fk, fk_id, key_regex, value_regex)
+        self._patch_weak_fk_in_updates(diffs, ci, fk, fk_id, key_regex, value_regex)
+
+    def _patch_weak_fk_in_additions(self,
+                                    diffs: InsertDiffs,
+                                    ci: CompareInsert,
+                                    fk: ForeignKey,
+                                    fk_id: InsertDiffs,
+                                    key_regex: re.Pattern,
+                                    value_regex: re.Pattern) -> None:
         for add in diffs.additions:
-            step = 0
             key = add.insert_vals[fk.key_column]
             if key_regex.search(key):
-                step = 1
                 old_key_val = add.insert_vals[fk.src_column]
                 m = value_regex.search(old_key_val)
                 if m:
                     old_key_val = m.group(2)
-                    step = 2
                     int_old_key = int(old_key_val)
                     if int_old_key > 0:
-                        step = 3
                         int_new_key = fk_id.find_replacement_key(int_old_key, weak=True)
                         if int_new_key != int_old_key:
-                            step = 4
                             ci.debug_print(
-                                f"    key: {key}, old: {old_key_val}, new: {int_new_key} (WEAK)")
+                                f"    add key: {key}, old: {old_key_val}, new: {int_new_key} (WEAK)")
                             add.insert_vals[fk.src_column] = str(int_new_key)
-            if step > 0 and step < 4:
-                ci.debug_print(f"    didn't map key: {key}, value: {old_key_val}, step: {step} (WEAK)")
+
+    def _patch_weak_fk_in_updates(self,
+                                  diffs: InsertDiffs,
+                                  ci: CompareInsert,
+                                  fk: ForeignKey,
+                                  fk_id: InsertDiffs,
+                                  key_regex: re.Pattern,
+                                  value_regex: re.Pattern) -> None:
+        for upd in diffs.updates:
+            if fk.key_column in upd.update_vals:
+                key = upd.update_vals[fk.key_column]
+                # TODO maybe refactor this
+                if key_regex.search(key):
+                    old_key_val = upd.update_vals[fk.src_column]
+                    m = value_regex.search(old_key_val)
+                    if m:
+                        old_key_val = m.group(2)
+                        int_old_key = int(old_key_val)
+                        if int_old_key > 0:
+                            int_new_key = fk_id.find_replacement_key(int_old_key, weak=True)
+                            if int_new_key != int_old_key:
+                                ci.debug_print(
+                                    f"    upd key: {key}, old: {old_key_val}, new: {int_new_key} (WEAK)")
+                                upd.update_vals[fk.src_column] = str(int_new_key)
 
     def _output_statement(self, statement: IM.Intermediate) -> None:
         if self._has_method(statement, "generate_sql"):

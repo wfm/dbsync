@@ -512,7 +512,7 @@ class Settings(BaseModel):
                         sr[key] = getattr(S, sr[key])
 
     @property
-    def weak_reference_regex(self) -> re:
+    def weak_reference_regex(self) -> re.Pattern:
         return self._weak_reference_regex
 
     def get_test_table_name_pattern(self) -> str:
