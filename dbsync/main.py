@@ -23,12 +23,12 @@ def build_argparser() -> Tuple[Settings, argparse.ArgumentParser]:
 
     argparser = argparse.ArgumentParser(
         prog="dbsync",
-        description="Generates SQL to sync prod DB to staging DB"
+        description="Generates SQL to sync two MySql databases"
     )
 
     argparser.add_argument(
         "filename",
-        help="The input file, a SQL dump from MySQL")
+        help="The input file, a SQL dump from MySQL.")
     argparser.add_argument(
         "-d", "--database",
         help="The name of the database to sync",

@@ -42,6 +42,7 @@ Is there a way to test this with stage?
 * For _options (at least), let DB set the autoinc column
 * add FKs for tables we added, _wps_
 * Getting warnings that disabling keys is not supported
+* Accept two files as input (prod and stage dump)
 
 ## Medium-term
 * decent test coverage
@@ -65,6 +66,7 @@ Is there a way to test this with stage?
 * Support other DML statements?
 * Prevent SQL injection?
 * Generalize the state machine code
+* Connect to live database
 
 # DONE
 * Implement stage -> prod

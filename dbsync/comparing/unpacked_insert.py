@@ -34,9 +34,9 @@ class UnpackedInsert:
         self.values = self._dstify(self._unpack(insert.values))
 
         self.comparison_key = table.get_comparison_key()
-        self.is_unique = self.comparison_key.is_unique
         if self.comparison_key is None:
-            raise DbSyncCompareException("Table has no keys")
+            raise DbSyncCompareException(f"Table {table.name} has no keys")
+        self.is_unique = self.comparison_key.is_unique
 
         self.key_column_names = self.comparison_key.get_column_names()
 

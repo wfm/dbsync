@@ -47,6 +47,8 @@ class Splitter:
                 return self._classify_table(ss)
             if token.match(T.DML, "INSERT"):
                 return self._classify_insert(ss)
+            if token.match(T.DDL, "ALTER"):
+                return self._classify_alter(ss)
         return 0
 
     def _classify_table(self, ss: SqlStatement) -> int:
@@ -71,6 +73,17 @@ class Splitter:
             return self._is_src_or_dst(name)
         else:
             raise DbSyncParseException(f"Expected an identifier, got {repr(token)}")
+
+    def _classify_alter(self, ss: SqlStatement) -> int:
+        token = ss.get_token()
+        if match_tokens(token, C.TABLE_TOKEN):
+            token = ss.get_token()
+            if isinstance(token, sql.Identifier):
+                name = token.value
+                return self._is_src_or_dst(name)
+            else:
+                raise DbSyncParseException(f"Expected an identifier, got {repr(token)}")
+        return 0
 
     def _is_src_or_dst(self, name: str) -> int:
         # TODO handle non-blank src prefix
